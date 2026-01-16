@@ -28,7 +28,7 @@
           AUSTRALIAN OPEN <span class="accent-teal">FANTASY DRAFT</span>
         </h1>
         <div class="text-xs text-gray-500 flex items-center gap-1">
-          <span class="w-2 h-2 rounded-full bg-green-500"></span> Live Snake Draft (4 users, 32 players each)
+          <span class="w-2 h-2 rounded-full bg-green-500"></span> Live Snake Draft (<span id="num-users-display">4</span> users, 32 players each)
         </div>
       </div>
 
@@ -38,12 +38,20 @@
         </a>
 
         <div class="flex items-center gap-4">
+          <div class="flex items-center gap-2">
+            <label for="num-users-input" class="text-[10px] text-gray-400 uppercase font-bold tracking-widest">Users:</label>
+            <input 
+              type="number" 
+              id="num-users-input" 
+              min="2" 
+              max="20" 
+              value="4" 
+              class="bg-gray-800 border border-gray-700 text-sm rounded-lg p-2 w-16 text-center focus:ring-teal-500 focus:border-teal-500"
+              onchange="updateNumUsers(this.value)"
+            />
+          </div>
           <select id="user-select" class="bg-gray-800 border border-gray-700 text-sm rounded-lg p-2 focus:ring-teal-500">
             <option value="">View As User...</option>
-            <option value="User 1">User 1</option>
-            <option value="User 2">User 2</option>
-            <option value="User 3">User 3</option>
-            <option value="User 4">User 4</option>
           </select>
           <button onclick="resetDraft()" class="text-[10px] text-gray-500 hover:text-red-500 uppercase font-bold tracking-widest">
             Reset Draft
@@ -78,7 +86,7 @@
       <div class="sleeper-card rounded-xl p-3">
         <div class="flex justify-between text-xs text-gray-500 mb-2">
           <span>Click "Draft" to assign player to the team currently on the clock.</span>
-          <span>Snake order: 1 → 2 → 3 → 4 → 4 → 3 → 2 → 1</span>
+          <span id="snake-order-display">Snake order: 1 → 2 → 3 → 4 → 4 → 3 → 2 → 1</span>
         </div>
         <div id="player-list" class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[70vh] overflow-y-auto"></div>
       </div>
@@ -283,19 +291,106 @@
     }));
 
     // Draft settings
-    const USERS = ["User 1", "User 2", "User 3", "User 4"];
+    let NUM_USERS = 4; // Can be changed via UI
+    let USERS = Array.from({ length: NUM_USERS }, (_, i) => `User ${i + 1}`);
     const ROSTER_SIZE = 32; 
     const TOTAL_PICKS = initialPlayers.length; 
 
     // Current user dropdown (for highlighting UI only)
-    let currentUser = "User 1";
+    let currentUser = USERS[0];
     const userSelect = document.getElementById("user-select");
+    const numUsersInput = document.getElementById("num-users-input");
+    
+    // Function to update number of users
+    function updateNumUsers(newNum) {
+      const num = parseInt(newNum, 10);
+      if (isNaN(num) || num < 2 || num > 20) {
+        alert("Number of users must be between 2 and 20");
+        numUsersInput.value = NUM_USERS;
+        return;
+      }
+      
+      const oldNum = NUM_USERS;
+      NUM_USERS = num;
+      USERS = Array.from({ length: NUM_USERS }, (_, i) => `User ${i + 1}`);
+      
+      // Save to Firebase
+      db.ref("/settings/numUsers").set(NUM_USERS);
+      
+      // Update Firebase users object - add new users if NUM_USERS increased
+      if (num > oldNum) {
+        db.ref("/users").once("value", snap => {
+          const existingUsers = snap.val() || {};
+          const usersObj = { ...existingUsers };
+          
+          // Add any new users that don't exist yet
+          USERS.forEach(user => {
+            if (!usersObj[user]) {
+              usersObj[user] = { picks: [], score: 0 };
+            }
+          });
+          
+          db.ref("/users").set(usersObj);
+        });
+      }
+      
+      // Update all UI elements
+      refreshUsersUI();
+      
+      // If current user no longer exists, reset to first user
+      if (!USERS.includes(currentUser)) {
+        currentUser = USERS[0];
+        userSelect.value = currentUser;
+        localStorage.setItem("ao_user", currentUser);
+      }
+    }
+    
+    // Function to refresh all user-related UI
+    function refreshUsersUI() {
+      // Update user select dropdown
+      userSelect.innerHTML = '<option value="">View As User...</option>';
+      USERS.forEach(user => {
+        const option = document.createElement("option");
+        option.value = user;
+        option.textContent = user;
+        if (user === currentUser) option.selected = true;
+        userSelect.appendChild(option);
+      });
+      
+      // Update UI displays
+      document.getElementById("num-users-display").textContent = NUM_USERS;
+      numUsersInput.value = NUM_USERS;
+      
+      // Generate snake order display
+      const forwardOrder = Array.from({ length: NUM_USERS }, (_, i) => i + 1).join(" → ");
+      const reverseOrder = Array.from({ length: NUM_USERS }, (_, i) => NUM_USERS - i).join(" → ");
+      document.getElementById("snake-order-display").textContent = `Snake order: ${forwardOrder} → ${reverseOrder}`;
+    }
+    
+    // Populate user select dropdown initially
+    refreshUsersUI();
+    
     userSelect.addEventListener("change", e => {
       currentUser = e.target.value;
       localStorage.setItem("ao_user", currentUser);
       // We do NOT stop you from drafting if you selected the wrong user.
       // We assume "Commissioner Mode".
     });
+    
+    // Load NUM_USERS from Firebase on startup
+    db.ref("/settings/numUsers").on("value", snap => {
+      if (snap.exists()) {
+        const savedNum = parseInt(snap.val(), 10);
+        if (!isNaN(savedNum) && savedNum >= 2 && savedNum <= 20) {
+          NUM_USERS = savedNum;
+          USERS = Array.from({ length: NUM_USERS }, (_, i) => `User ${i + 1}`);
+          refreshUsersUI();
+        }
+      }
+    });
+    
+    // Make updateNumUsers available globally
+    window.updateNumUsers = updateNumUsers;
 
     function getUserDraftOrder() {
       return USERS;
