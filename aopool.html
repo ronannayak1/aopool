@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>AO Fantasy Snake Draft</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet" />
+  <style>
+    body { background-color: #0d1117; color: #e6edf3; font-family: 'Inter', sans-serif; }
+    .sleeper-card { background-color: #161b22; border: 1px solid #30363d; }
+    .sleeper-card-hover:hover { border-color: #58a6ff; }
+    .accent-teal { color: #2de2e6; }
+    .btn-main { background-color: #2de2e6; color: #0d1117; font-weight: 800; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; }
+    .btn-main:disabled { background-color: #30363d; color: #8b949e; cursor: not-allowed; }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #0d1117; }
+    ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 10px; }
+  </style>
+</head>
+<body class="antialiased">
+  <nav class="border-b border-gray-800 p-4 sticky top-0 bg-slate-900 z-50 shadow-xl">
+    <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+      <div>
+        <h1 class="text-xl font-800 tracking-tighter italic">
+          AUSTRALIAN OPEN <span class="accent-teal">FANTASY DRAFT</span>
+        </h1>
+        <div class="text-xs text-gray-500 flex items-center gap-1">
+          <span class="w-2 h-2 rounded-full bg-green-500"></span> Live Snake Draft (4 users, 32 players each)
+        </div>
+      </div>
+
+<div class="flex items-center gap-4">
+        <a href="https://ausopen.com/draws" target="_blank" class="text-[10px] text-teal-400 hover:text-teal-200 uppercase font-bold tracking-widest border border-teal-800 px-2 py-1 rounded hover:bg-teal-900 transition">
+            View Official Draw ↗
+        </a>
+
+      <div class="flex items-center gap-4">
+        <select id="user-select" class="bg-gray-800 border border-gray-700 text-sm rounded-lg p-2 focus:ring-teal-500">
+          <option value="">View As User...</option>
+          <option value="User 1">User 1</option>
+          <option value="User 2">User 2</option>
+          <option value="User 3">User 3</option>
+          <option value="User 4">User 4</option>
+        </select>
+        <button onclick="resetDraft()" class="text-[10px] text-gray-500 hover:text-red-500 uppercase font-bold tracking-widest">
+          Reset Draft
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-7xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <div class="lg:col-span-8 space-y-4">
+      <div class="flex justify-between items-end mb-2 px-1">
+        <div>
+          <h2 class="text-sm font-bold uppercase tracking-widest text-gray-400">Players</h2>
+          <div id="draft-status" class="text-xs text-teal-400 font-bold mt-1"></div>
+        </div>
+        <span id="player-count" class="text-xs text-gray-600"></span>
+      </div>
+
+      <div class="sleeper-card rounded-xl p-3">
+        <div class="flex justify-between text-xs text-gray-500 mb-2">
+          <span>Click "Draft" to assign player to the team currently on the clock.</span>
+          <span>Snake order: 1 → 2 → 3 → 4 → 4 → 3 → 2 → 1</span>
+        </div>
+        <div id="player-list" class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[70vh] overflow-y-auto"></div>
+      </div>
+    </div>
+
+    <div class="lg:col-span-4 space-y-6">
+      <div class="sleeper-card rounded-xl p-4 sticky top-24 space-y-4">
+        <h2 class="text-lg font-bold flex justify-between items-center">
+          Teams & Scores
+          <span class="text-xs text-teal-400">Win points by round</span>
+        </h2>
+        <div class="text-[10px] text-gray-400 leading-relaxed">
+          R1: 1 • R2: 1.5 • R3: 2.25 • R4: 3.375 • R5: 5.0625 • R6: 7.59375 • R7: 11.390625
+        </div>
+        <div id="user-stats-container" class="space-y-4"></div>
+      </div>
+
+      <div class="sleeper-card rounded-xl p-4 space-y-3">
+        <h3 class="text-sm font-bold uppercase tracking-widest text-gray-400">Record Match Result</h3>
+        <p class="text-[11px] text-gray-400">
+          Select a player and the round they just won.
+        </p>
+        <div class="space-y-2">
+          <select id="winner-select" class="w-full bg-gray-900 border border-gray-700 text-xs rounded p-2">
+            <option value="">Select Player</option>
+          </select>
+          <select id="round-select" class="w-full bg-gray-900 border border-gray-700 text-xs rounded p-2">
+            <option value="">Select Round Won</option>
+            <option value="1">Round 1 (1 pt)</option>
+            <option value="2">Round 2 (1.5 pts)</option>
+            <option value="3">Round 3 (2.25 pts)</option>
+            <option value="4">Round 4 (3.375 pts)</option>
+            <option value="5">Round 5 (5.0625 pts)</option>
+            <option value="6">Round 6 (7.59375 pts)</option>
+            <option value="7">Round 7 (11.390625 pts)</option>
+          </select>
+          <button onclick="recordWin()" class="btn-main w-full py-2 rounded mt-1">
+            Add Win
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // ==== FIREBASE CONFIG (REPLACE WITH YOUR OWN) ====
+    const firebaseConfig = {
+      apiKey: "AIzaSyCGDOKVi5-dlS_VClMEyKpl7_AQLrF3qr4",
+      authDomain: "aopool.firebaseapp.com",
+      databaseURL: "https://aopool-default-rtdb.firebaseio.com",
+      projectId: "aopool",
+      storageBucket: "aopool.firebasestorage.app",
+      messagingSenderId: "1047771739023",
+      appId: "1:1047771739023:web:603e3ced5b2932e49851fa"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    // ==== SCORING TABLE ====
+    const ROUND_POINTS = {
+      1: 1, 2: 1.5, 3: 2.25, 4: 3.375, 5: 5.0625, 6: 7.59375, 7: 11.390625
+    };
+
+    // ==== INITIAL PLAYER LIST ====
+const basePlayers = [
+  { id: 1, name: "C. Alcaraz", seed: 1, country: "spain", hyperlink: "https://ausopen.com/players/spain/carlos-alcaraz#!stats" },
+  { id: 2, name: "J. Sinner", seed: 2, country: "italy", hyperlink: "https://ausopen.com/players/italy/jannik-sinner#!stats" },
+  { id: 3, name: "A. Zverev", seed: 3, country: "germany", hyperlink: "https://ausopen.com/players/germany/alexander-zverev#!stats" },
+  { id: 4, name: "N. Djokovic", seed: 4, country: "serbia", hyperlink: "https://ausopen.com/players/serbia/novak-djokovic#!stats" },
+  { id: 5, name: "L. Musetti", seed: 5, country: "italy", hyperlink: "https://ausopen.com/players/italy/lorenzo-musetti#!stats" },
+  { id: 6, name: "A. De Minaur", seed: 6, country: "australia", hyperlink: "https://ausopen.com/players/australia/alex-de-minaur#!stats" },
+  { id: 7, name: "F. Auger-Aliassime", seed: 7, country: "canada", hyperlink: "https://ausopen.com/players/canada/felix-auger-aliassime#!stats" },
+  { id: 8, name: "B. Shelton", seed: 8, country: "united-states-america", hyperlink: "https://ausopen.com/players/united-states-america/ben-shelton#!stats" },
+  { id: 9, name: "T. Fritz", seed: 9, country: "united-states-america", hyperlink: "https://ausopen.com/players/united-states-america/taylor-fritz#!stats" },
+  { id: 10, name: "A. Bublik", seed: 10, country: "kazakhstan", hyperlink: "https://ausopen.com/players/kazakhstan/alexander-bublik#!stats" },
+  { id: 11, name: "D. Medvedev", seed: 11, country: "russia", hyperlink: "https://ausopen.com/players/russia/daniil-medvedev#!stats" },
+  { id: 12, name: "C. Ruud", seed: 12, country: "norway", hyperlink: "https://ausopen.com/players/norway/casper-ruud#!stats" },
+  { id: 13, name: "A. Rublev", seed: 13, country: "russia", hyperlink: "https://ausopen.com/players/russia/andrey-rublev#!stats" },
+  { id: 14, name: "A. Davidovich Fokina", seed: 14, country: "spain", hyperlink: "https://ausopen.com/players/spain/alejandro-davidovich-fokina#!stats" },
+  { id: 15, name: "K. Khachanov", seed: 15, country: "russia", hyperlink: "https://ausopen.com/players/russia/karen-khachanov#!stats" },
+  { id: 16, name: "J. Mensik", seed: 16, country: "czech-republic", hyperlink: "https://ausopen.com/players/czech-republic/jakub-mensik#!stats" },
+  { id: 17, name: "J. Lehecka", seed: 17, country: "czech-republic", hyperlink: "https://ausopen.com/players/czech-republic/jiri-lehecka#!stats" },
+  { id: 18, name: "F. Cerundolo", seed: 18, country: "argentina", hyperlink: "https://ausopen.com/players/argentina/francisco-cerundolo#!stats" },
+  { id: 19, name: "T. Paul", seed: 19, country: "united-states-america", hyperlink: "https://ausopen.com/players/united-states-america/tommy-paul#!stats" },
+  { id: 20, name: "F. Cobolli", seed: 20, country: "italy", hyperlink: "https://ausopen.com/players/italy/flavio-cobolli#!stats" },
+  { id: 21, name: "D. Shapovalov", seed: 21, country: "canada", hyperlink: "https://ausopen.com/players/canada/denis-shapovalov#!stats" },
+  { id: 22, name: "L. Darderi", seed: 22, country: "italy", hyperlink: "https://ausopen.com/players/italy/luciano-darderi#!stats" },
+  { id: 23, name: "T. Griekspoor", seed: 23, country: "netherlands", hyperlink: "https://ausopen.com/players/netherlands/tallon-griekspoor#!stats" },
+  { id: 24, name: "A. Rinderknech", seed: 24, country: "france", hyperlink: "https://ausopen.com/players/france/arthur-rinderknech#!stats" },
+  { id: 25, name: "L. Tien", seed: 25, country: "united-states-america", hyperlink: "https://ausopen.com/players/united-states-america/learner-tien#!stats" },
+  { id: 26, name: "C. Norrie", seed: 26, country: "united-kingdom", hyperlink: "https://ausopen.com/players/united-kingdom/cameron-norrie#!stats" },
+  { id: 27, name: "B. Nakashima", seed: 27, country: "united-states-america", hyperlink: "https://ausopen.com/players/united-states-america/brandon-nakashima#!stats" },
+  { id: 28, name: "J. Fonseca", seed: 28, country: "brazil", hyperlink: "https://ausopen.com/players/brazil/joao-fonseca#!stats" },
+  { id: 29, name: "F. Tiafoe", seed: 29, country: "united-states-america", hyperlink: "https://ausopen.com/players/united-states-america/frances-tiafoe#!stats" },
+  { id: 30, name: "V. Vacherot", seed: 30, country: "monaco", hyperlink: "https://ausopen.com/players/monaco/valentin-vacherot#!stats" },
+  { id: 31, name: "S. Tsitsipas", seed: 31, country: "greece", hyperlink: "https://ausopen.com/players/greece/stefanos-tsitsipas#!stats" },
+  { id: 32, name: "C. Moutet", seed: 32, country: "france", hyperlink: "https://ausopen.com/players/france/corentin-moutet#!stats" },
+  { id: 33, name: "T. Machac", seed: "", country: "czech-republic", hyperlink: "https://ausopen.com/players/czech-republic/tomas-machac#!stats" },
+  { id: 34, name: "U. Humbert", seed: "", country: "france", hyperlink: "https://ausopen.com/players/france/ugo-humbert#!stats" },
+  { id: 35, name: "T. Etcheverry", seed: "", country: "argentina", hyperlink: "https://ausopen.com/players/argentina/tomas-martin-etcheverry#!stats" },
+  { id: 36, name: "J. Munar", seed: "", country: "spain", hyperlink: "https://ausopen.com/players/spain/jaume-munar#!stats" },
+  { id: 37, name: "S. Baez", seed: "", country: "argentina", hyperlink: "https://ausopen.com/players/argentina/sebastian-baez#!stats" },
+  { id: 38, name: "L. Sonego", seed: "", country: "italy", hyperlink: "https://ausopen.com/players/italy/lorenzo-sonego#!stats" },
+  { id: 39, name: "G. Diallo", seed: "", country: "canada", hyperlink: "https://ausopen.com/players/canada/gabriel-diallo#!stats" },
+  { id: 40, name: "Z. Bergs", seed: "", country: "belgium", hyperlink: "https://ausopen.com/players/belgium/zizou-bergs#!stats" },
+  { id: 41, name: "D. Altmaier", seed: "", country: "germany", hyperlink: "https://ausopen.com/players/germany/daniel-altmaier#!stats" },
+  { id: 42, name: "G. Dimitrov", seed: "", country: "bulgaria", hyperlink: "https://ausopen.com/players/bulgaria/grigor-dimitrov#!stats" },
+  { id: 43, name: "N. Borges", seed: "", country: "portugal", hyperlink: "https://ausopen.com/players/portugal/nuno-borges#!stats" },
+  { id: 44, name: "C. Ugo Carabelli", seed: "", country: "argentina", hyperlink: "https://ausopen.com/players/argentina/camilo-ugo-carabelli#!stats" },
+  { id: 45, name: "J. Brooksby", seed: "", country: "united-states-america", hyperlink: "https://ausopen.com/players/united-states-america/jenson-brooksby#!stats" },
+  { id: 46, name: "A. Popyrin", seed: "", country: "australia", hyperlink: "https://ausopen.com/players/australia/alexei-popyrin#!stats" },
+  { id: 47, name: "A. Muller", seed: "", country: "france", hyperlink: "https://ausopen.com/players/france/alexandre-muller#!stats" },
+  { id: 48, name: "S. Korda", seed: "", country: "united-states-america", hyperlink: "https://ausopen.com/players/united-states-america/sebastian-korda#!stats" },
+  { id: 49, name: "F. Marozsan", seed: "", country: "hungary", hyperlink: "https://ausopen.com/players/hungary/fabian-marozsan#!stats" },
+  { id: 50, name: "H. Hurkacz", seed: "", country: "poland", hyperlink: "https://ausopen.com/players/poland/hubert-hurkacz#!stats" },
+  { id: 51, name: "A. Kovacevic", seed: "", country: "united-states-america", hyperlink: "https://ausopen.com/players/united-states-america/aleksandar-kovacevic#!stats" },
+  { id: 52, name: "M. Fucsovics", seed: "", country: "hungary", hyperlink: "https://ausopen.com/players/hungary/marton-fucsovics#!stats" },
+  { id: 53, name: "M. Berrettini", seed: "", country: "italy", hyperlink: "https://ausopen.com/players/italy/matteo-berrettini#!stats" },
+  { id: 54, name: "V. Royer", seed: "", country: "france", hyperlink: "https://ausopen.com/players/france/valentin-royer#!stats" },
+  { id: 55, name: "K. Majchrzak", seed: "", country: "poland", hyperlink: "https://ausopen.com/players/poland/kamil-majchrzak#!stats" },
+  { id: 56, name: "M. Kecmanovic", seed: "", country: "serbia", hyperlink: "https://ausopen.com/players/serbia/miomir-kecmanovic#!stats" },
+  { id: 57, name: "M. Giron", seed: "", country: "united-states-america", hyperlink: "https://ausopen.com/players/united-states-america/marcos-giron#!stats" },
+  { id: 58, name: "Z. Zhizhen", seed: "", country: "china", hyperlink: "https://ausopen.com/players/china/zhizhen-zhang#!stats" },
+  { id: 59, name: "R. Opelka", seed: "", country: "united-states-america", hyperlink: "https://ausopen.com/players/united-states-america/reilly-opelka#!stats" },
+  { id: 60, name: "G. Mpetshi Perricard", seed: "", country: "france", hyperlink: "https://ausopen.com/players/france/giovanni-mpetshi-perricard#!stats" },
+  { id: 61, name: "T. Atmane", seed: "", country: "france", hyperlink: "https://ausopen.com/players/france/terence-atmane#!stats" },
+  { id: 62, name: "M. Arnaldi", seed: "", country: "italy", hyperlink: "https://ausopen.com/players/italy/matteo-arnaldi#!stats" },
+  { id: 63, name: "D. Dzumhur", seed: "", country: "bosnia-and-herzegovina", hyperlink: "https://ausopen.com/players/bosnia-and-herzegovina/damir-dzumhur#!stats" },
+  { id: 64, name: "A. Cazaux", seed: "", country: "france", hyperlink: "https://ausopen.com/players/france/arthur-cazaux#!stats" },
+  { id: 65, name: "F. Comesana", seed: "", country: "argentina", hyperlink: "https://ausopen.com/players/argentina/francisco-comesana#!stats" },
+  { id: 66, name: "A. Mannarino", seed: "", country: "france", hyperlink: "https://ausopen.com/players/france/adrian-mannarino#!stats" },
+  { id: 67, name: "M. Cilic", seed: "", country: "croatia", hyperlink: "https://ausopen.com/players/croatia/marin-cilic#!stats" },
+  { id: 68, name: "P. Martinez", seed: "", country: "spain", hyperlink: "https://ausopen.com/players/spain/pedro-martinez#!stats" },
+  { id: 69, name: "R. Collignon", seed: "", country: "belgium", hyperlink: "https://ausopen.com/players/belgium/raphael-collignon#!stats" },
+  { id: 70, name: "J. De Jong", seed: "", country: "netherlands", hyperlink: "https://ausopen.com/players/netherlands/jesper-de-jong#!stats" },
+  { id: 71, name: "M. Navone", seed: "", country: "argentina", hyperlink: "https://ausopen.com/players/argentina/mariano-navone#!stats" },
+  { id: 72, name: "B. Van De Zandschulp", seed: "", country: "netherlands", hyperlink: "https://ausopen.com/players/netherlands/botic-van-de-zandschulp#!stats" },
+  { id: 73, name: "M. Bellucci", seed: "", country: "italy", hyperlink: "https://ausopen.com/players/italy/mattia-bellucci#!stats" },
+  { id: 74, name: "J. Fearnley", seed: "", country: "united-kingdom", hyperlink: "https://ausopen.com/players/united-kingdom/jacob-fearnley#!stats" },
+  { id: 75, name: "E. Quinn", seed: "", country: "united-states-america", hyperlink: "https://ausopen.com/players/united-states-america/ethan-quinn#!stats" },
+  { id: 76, name: "A. Walton", seed: "", country: "australia", hyperlink: "https://ausopen.com/players/australia/adam-walton#!stats" },
+  { id: 77, name: "C. Garin", seed: "", country: "chile", hyperlink: "https://ausopen.com/players/chile/cristian-garin#!stats" },
+  { id: 78, name: "A. Tabilo", seed: "", country: "chile", hyperlink: "https://ausopen.com/players/chile/alejandro-tabilo#!stats" },
+  { id: 79, name: "F. Misolic", seed: "", country: "austria", hyperlink: "https://ausopen.com/players/austria/filip-misolic#!stats" },
+  { id: 80, name: "J. Cerundolo", seed: "", country: "argentina", hyperlink: "https://ausopen.com/players/argentina/juan-manuel-cerundolo#!stats" },
+  { id: 81, name: "J. Struff", seed: "", country: "germany", hyperlink: "https://ausopen.com/players/germany/jan-lennard-struff#!stats" },
+  { id: 82, name: "A. Michelsen", seed: "", country: "united-states-america", hyperlink: "https://ausopen.com/players/united-states-america/alex-michelsen#!stats" },
+  { id: 83, name: "J. Duckworth", seed: "", country: "australia", hyperlink: "https://ausopen.com/players/australia/james-duckworth#!stats" },
+  { id: 84, name: "A. Vukic", seed: "", country: "australia", hyperlink: "https://ausopen.com/players/australia/aleksandar-vukic#!stats" },
+  { id: 85, name: "E. Nava", seed: "", country: "united-states-america", hyperlink: "https://ausopen.com/players/united-states-america/emilio-nava#!stats" },
+  { id: 86, name: "E. Spizzirri", seed: "", country: "united-states-america", hyperlink: "https://ausopen.com/players/united-states-america/eliot-spizzirri#!stats" },
+  { id: 87, name: "R. Bautista Agut", seed: "", country: "spain", hyperlink: "https://ausopen.com/players/spain/roberto-bautista-agut#!stats" },
+  { id: 88, name: "L. Djere", seed: "", country: "serbia", hyperlink: "https://ausopen.com/players/serbia/laslo-djere#!stats" },
+  { id: 89, name: "P. Carreno Busta", seed: "", country: "spain", hyperlink: "https://ausopen.com/players/spain/pablo-carreno-busta#!stats" },
+  { id: 90, name: "D. Svrcina", seed: "", country: "czech-republic", hyperlink: "https://ausopen.com/players/czech-republic/dalibor-svrcina#!stats" },
+  { id: 91, name: "H. Gaston", seed: "", country: "france", hyperlink: "https://ausopen.com/players/france/hugo-gaston#!stats" },
+  { id: 92, name: "H. Medjedovic", seed: "", country: "serbia", hyperlink: "https://ausopen.com/players/serbia/hamad-medjedovic#!stats" },
+  { id: 93, name: "T. Schoolkate", seed: "", country: "australia", hyperlink: "https://ausopen.com/players/australia/tristan-schoolkate#!stats" },
+  { id: 94, name: "C. Taberner", seed: "", country: "spain", hyperlink: "https://ausopen.com/players/spain/carlos-taberner#!stats" },
+  { id: 95, name: "V. Kopriva", seed: "", country: "czech-republic", hyperlink: "https://ausopen.com/players/czech-republic/vit-kopriva#!stats" },
+  { id: 96, name: "Y. Hanfmann", seed: "", country: "germany", hyperlink: "https://ausopen.com/players/germany/yannick-hanfmann#!stats" },
+  { id: 97, name: "T. Tirante", seed: "", country: "argentina", hyperlink: "https://ausopen.com/players/argentina/thiago-agustin-tirante#!stats" },
+  { id: 98, name: "A. Shevchenko", seed: "", country: "kazakhstan", hyperlink: "https://ausopen.com/players/kazakhstan/alexander-shevchenko#!stats" },
+  { id: 99, name: "B. Bonzi", seed: "", country: "france", hyperlink: "https://ausopen.com/players/france/benjamin-bonzi#!stats" },
+  { id: 100, name: "L. Nardi", seed: "", country: "italy", hyperlink: "https://ausopen.com/players/italy/luca-nardi#!stats" },
+  { id: 101, name: "G. Monfils", seed: "", country: "france", hyperlink: "https://ausopen.com/players/france/gael-monfils#!stats" },
+  { id: 102, name: "J. Thompson", seed: "", country: "australia", hyperlink: "https://ausopen.com/players/australia/jordan-thompson#!stats" },
+  { id: 103, name: "S. Mochizuki", seed: "", country: "japan", hyperlink: "https://ausopen.com/players/japan/shintaro-mochizuki#!stats" },
+  { id: 104, name: "R. Hijikata", seed: "", country: "australia", hyperlink: "https://ausopen.com/players/australia/rinky-hijikata#!stats" },
+  { id: 105, name: "P. Kypson", seed: "", country: "united-states-america", hyperlink: "https://ausopen.com/players/united-states-america/patrick-kypson#!stats" },
+  { id: 106, name: "Q. Halys", seed: "", country: "france", hyperlink: "https://ausopen.com/players/france/quentin-halys#!stats" },
+  { id: 107, name: "C. O'Connell", seed: "", country: "australia", hyperlink: "https://ausopen.com/players/australia/christopher-oconnell#!stats" },
+  { id: 108, name: "Y. Bu", seed: "", country: "china", hyperlink: "https://ausopen.com/players/china/yunchaokete-bu#!stats" },
+  { id: 109, name: "D. Prizmic", seed: "", country: "croatia", hyperlink: "https://ausopen.com/players/croatia/dino-prizmic#!stats" },
+  { id: 110, name: "K. Jacquet", seed: "", country: "france", hyperlink: "https://ausopen.com/players/france/kyrian-jacquet#!stats" },
+  { id: 111, name: "N. Budkov Kjaer", seed: "", country: "norway", hyperlink: "https://ausopen.com/players/norway/nicolai-budkov-kjaer#!stats" },
+  { id: 112, name: "S. Wawrinka", seed: "", country: "switzerland", hyperlink: "https://ausopen.com/players/switzerland/stan-wawrinka#!stats" },
+  { id: 113, name: "F. Maestrelli", seed: "", country: "italy", hyperlink: "https://ausopen.com/players/italy/francesco-maestrelli#!stats" },
+  { id: 114, name: "Z. Svajda", seed: "", country: "united-states-america", hyperlink: "https://ausopen.com/players/united-states-america/zachary-svajda#!stats" },
+  { id: 115, name: "L. Draxl", seed: "", country: "canada", hyperlink: "https://ausopen.com/players/canada/liam-draxl#!stats" },
+  { id: 116, name: "R. Jodar", seed: "", country: "spain", hyperlink: "https://ausopen.com/players/spain/rafael-jodar#!stats" },
+  { id: 117, name: "J. Faria", seed: "", country: "portugal", hyperlink: "https://ausopen.com/players/portugal/jaime-faria#!stats" },
+  { id: 118, name: "W. Yibing", seed: "", country: "china", hyperlink: "https://ausopen.com/players/china/yibing-wu#!stats" },
+  { id: 119, name: "M. Zheng", seed: "", country: "united-states-america", hyperlink: "https://ausopen.com/players/united-states-america/michael-zheng#!stats" },
+  { id: 120, name: "E. Ymer", seed: "", country: "sweden", hyperlink: "https://ausopen.com/players/sweden/elias-ymer#!stats" },
+  { id: 121, name: "M. Damm", seed: "", country: "united-states-america", hyperlink: "https://ausopen.com/players/united-states-america/martin-damm#!stats" },
+  { id: 122, name: "D. Sweeny", seed: "", country: "australia", hyperlink: "https://ausopen.com/players/australia/dane-sweeny#!stats" },
+  { id: 123, name: "A. Fery", seed: "", country: "united-kingdom", hyperlink: "https://ausopen.com/players/united-kingdom/arthur-fery#!stats" },
+  { id: 124, name: "J. Kubler", seed: "", country: "australia", hyperlink: "https://ausopen.com/players/australia/jason-kubler#!stats" },
+  { id: 125, name: "A. Gea", seed: "", country: "france", hyperlink: "https://ausopen.com/players/france/arthur-gea#!stats" },
+  { id: 126, name: "J. Shang", seed: "", country: "china", hyperlink: "https://ausopen.com/players/china/juncheng-shang#!stats" },
+  { id: 127, name: "N. Basavareddy", seed: "", country: "united-states-america", hyperlink: "https://ausopen.com/players/united-states-america/nishesh-basavareddy#!stats" },
+  { id: 128, name: "R. Sakamoto", seed: "", country: "japan", hyperlink: "https://ausopen.com/players/japan/rei-sakamoto#!stats" }
+];
+
+    const initialPlayers = basePlayers.map(p => ({
+      ...p,
+      owner: null,
+      totalWins: 0,
+      points: 0
+    }));
+
+    // Draft settings
+    const USERS = ["User 1", "User 2", "User 3", "User 4"];
+    const ROSTER_SIZE = 32; 
+    const TOTAL_PICKS = initialPlayers.length; 
+
+    // Current user dropdown (for highlighting UI only)
+    let currentUser = "User 1";
+    const userSelect = document.getElementById("user-select");
+    userSelect.addEventListener("change", e => {
+      currentUser = e.target.value;
+      localStorage.setItem("ao_user", currentUser);
+      // We do NOT stop you from drafting if you selected the wrong user.
+      // We assume "Commissioner Mode".
+    });
+
+    function getUserDraftOrder() {
+      return USERS;
+    }
+
+    // Compute whose turn it is
+    function computeCurrentDrafter(pickNumber) {
+      const round = Math.floor(pickNumber / USERS.length);
+      const indexInRound = pickNumber % USERS.length;
+      const order = getUserDraftOrder();
+      if (round % 2 === 0) {
+        return order[indexInRound];
+      } else {
+        return order[USERS.length - 1 - indexInRound];
+      }
+    }
+
+    // ===== Reset / Initialize Draft =====
+    function resetDraft() {
+      if (!confirm("Reset all teams, picks, and scoring for everyone?")) return;
+
+      const usersObj = {};
+      USERS.forEach(u => {
+        usersObj[u] = { picks: [], score: 0 };
+      });
+
+      db.ref("/").set({
+        players: initialPlayers,
+        users: usersObj,
+        draft: { currentPick: 0, finished: false }
+      });
+    }
+
+    // ===== Draft a player (Commissioner Mode) =====
+    // MODIFIED: This allows the click to work regardless of which user is selected in dropdown
+    function draftPlayer(playerIndex) {
+      db.ref("/").transaction(data => {
+        if (!data) return data; // Wait for DB load
+        
+        // Initialize if empty
+        if (!data.draft || !data.players) return data;
+
+        const draft = data.draft;
+        const players = data.players;
+        const users = data.users;
+
+        if (draft.finished) return data;
+
+        const player = players[playerIndex];
+        if (!player || player.owner) return data;
+
+        // 1. Calculate who is supposed to draft right now
+        const drafter = computeCurrentDrafter(draft.currentPick);
+
+	if (drafter !== currentUser){
+		return data;
+	}
+
+
+        // Check roster size
+        if (users[drafter].picks && users[drafter].picks.length >= ROSTER_SIZE) {
+          return data;
+        }
+
+        // Initialize array if missing
+        if (!users[drafter].picks) users[drafter].picks = [];
+
+        // Assign player
+        players[playerIndex].owner = drafter;
+        users[drafter].picks.push(player.id);
+
+        draft.currentPick++;
+        if (draft.currentPick >= TOTAL_PICKS) {
+          draft.finished = true;
+        }
+
+        data.players = players;
+        data.users = users;
+        data.draft = draft;
+        return data;
+      });
+    }
+
+    // ===== Record a match win =====
+    function recordWin() {
+      const winnerSelect = document.getElementById("winner-select");
+      const roundSelect = document.getElementById("round-select");
+
+      const playerId = parseInt(winnerSelect.value, 10);
+      const round = parseInt(roundSelect.value, 10);
+
+      if (!playerId || !round) {
+        alert("Select both player and round.");
+        return;
+      }
+
+      const pointsToAdd = ROUND_POINTS[round] || 0;
+
+      db.ref("/").transaction(data => {
+        if (!data || !data.players || !data.users) return data;
+
+        const players = data.players;
+        const users = data.users;
+
+        const pIndex = players.findIndex(p => p.id === playerId);
+        if (pIndex === -1) return data;
+
+        const player = players[pIndex];
+        
+        // Update Player Stats
+        players[pIndex].totalWins = (players[pIndex].totalWins || 0) + 1;
+        players[pIndex].points = (players[pIndex].points || 0) + pointsToAdd;
+
+        // Update Owner Stats (if owned)
+        if (player.owner) {
+          const owner = player.owner;
+          users[owner].score = (users[owner].score || 0) + pointsToAdd;
+        }
+
+        data.players = players;
+        data.users = users;
+        return data;
+      });
+
+      roundSelect.value = "";
+    }
+
+    // ===== REALTIME RENDERING =====
+    const playerListEl = document.getElementById("player-list");
+    const userStatsEl = document.getElementById("user-stats-container");
+    const draftStatusEl = document.getElementById("draft-status");
+    const playerCountEl = document.getElementById("player-count");
+    const winnerSelectEl = document.getElementById("winner-select");
+
+    db.ref("/").on("value", snap => {
+      const data = snap.val();
+      
+      // Handle empty DB state gracefully
+      if (!data) {
+        draftStatusEl.textContent = "Database empty. Click Reset Draft to start.";
+        return; 
+      }
+
+      const players = data.players || [];
+      const users = data.users || {};
+      const draft = data.draft || { currentPick: 0, finished: false };
+
+      // DRAFT STATUS & CURRENT DRAFTER
+      let drafter = "";
+      if (draft.finished) {
+        draftStatusEl.textContent = "Draft complete.";
+      } else {
+        drafter = computeCurrentDrafter(draft.currentPick);
+        const picksDone = draft.currentPick;
+        draftStatusEl.textContent = `ON THE CLOCK: ${drafter} (Pick ${picksDone + 1})`;
+      }
+
+// PLAYER LIST
+      playerListEl.innerHTML = "";
+      const undraftedCount = players.filter(p => !p.owner).length;
+      playerCountEl.textContent = `${undraftedCount} left`;
+
+      players.forEach((p, idx) => {
+        const isOwned = !!p.owner;
+        
+        // CHANGED: Element type is now 'div' instead of 'button' to allow nested links
+        const card = document.createElement("div");
+        
+        // Highlight logic
+        const isTakenByMe = (p.owner === currentUser) && isOwned;
+        const isDraftable = !isOwned && !draft.finished;
+
+        // CHANGED: Added 'cursor-pointer' manually since it's no longer a button
+        card.className =
+          "sleeper-card sleeper-card-hover rounded-lg p-3 flex justify-between items-center text-left w-full relative " +
+          (isOwned ? "opacity-50 " : "cursor-pointer ") + 
+          (isTakenByMe ? "border-teal-500/50" : "");
+
+        const ownerLabel = isOwned
+          ? `<div class="text-[10px] text-teal-400 font-bold uppercase">${p.owner}</div>`
+          : `<div class="text-[10px] text-gray-500 uppercase">Undrafted</div>`;
+          
+        const seedText = p.seed ? `<span class="text-[10px] text-gray-500 mr-2">[${p.seed}]</span>` : "";
+        
+        // Determine Button Text
+        let btnClass = "btn-main px-2 py-1 rounded text-[10px]";
+        
+        if (!isDraftable) {
+            btnClass = "hidden";
+        }
+
+        // CHANGED: Wrapped p.name in an <a> tag
+        // Added onclick="event.stopPropagation()" so clicking the link DOES NOT draft the player
+        card.innerHTML = `
+          <div>
+            <div class="text-sm font-bold">
+                ${seedText}
+                <a href="${p.hyperlink}" target="_blank" class="hover:text-teal-400 hover:underline z-10 relative" onclick="event.stopPropagation()">
+                    ${p.name}
+                </a>
+            </div>
+            <div class="flex gap-3 mt-1">
+              ${ownerLabel}
+              ${
+                p.points && p.points > 0
+                  ? `<div class="text-[10px] text-yellow-400">Pts: ${p.points.toFixed(3)}</div>`
+                  : ""
+              }
+            </div>
+          </div>
+          <div class="text-right">
+            <span class="${btnClass}">Draft for ${drafter}</span>
+          </div>
+        `;
+
+        // The card click still handles the drafting
+        card.onclick = () => {
+          if (isDraftable) draftPlayer(idx);
+        };
+
+        playerListEl.appendChild(card);
+      });
+
+      // WINNER SELECT OPTIONS
+      winnerSelectEl.innerHTML = `<option value="">Select Player</option>`;
+      players.forEach(p => {
+        const label = p.seed ? `[${p.seed}] ${p.name}` : p.name;
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = label;
+        winnerSelectEl.appendChild(opt);
+      });
+
+      // USER STATS
+      userStatsEl.innerHTML = "";
+      USERS.forEach(u => {
+        const user = users[u] || { picks: [], score: 0 };
+        // Highlight if this is the user currently viewing OR if it's their turn to draft
+        const isViewing = currentUser === u;
+        const isOnClock = (u === drafter) && !draft.finished;
+        
+        const pickedPlayers = players.filter(p => p.owner === u);
+
+        let borderClass = "border-gray-800";
+        if (isOnClock) borderClass = "border-teal-500 ring-1 ring-teal-500"; 
+        else if (isViewing) borderClass = "border-gray-600";
+
+        const div = document.createElement("div");
+        div.className = `p-3 rounded-lg border ${borderClass} bg-[#161b22] relative transition-all duration-300`;
+        
+        div.innerHTML = `
+          <div class="flex justify-between items-center mb-2">
+            <div class="text-sm font-bold ${isOnClock ? "text-teal-400 animate-pulse" : "text-gray-300"}">
+              ${u} ${isOnClock ? "(PICKING)" : ""}
+            </div>
+            <div class="text-right text-xs">
+              <div class="font-mono text-lg font-bold">${(user.score || 0).toFixed(3)} pts</div>
+              <div class="text-[10px] text-gray-500">${pickedPlayers.length}/${ROSTER_SIZE} players</div>
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-1 max-h-40 overflow-y-auto">
+            ${
+              pickedPlayers.length
+                ? pickedPlayers
+                    .map(
+                      pl => `
+                  <span class="text-[9px] bg-gray-900 border border-gray-700 px-2 py-0.5 rounded text-gray-200">
+                    ${pl.seed ? "[" + pl.seed + "] " : ""}${pl.name}
+                    ${
+                      pl.points && pl.points > 0
+                        ? `<span class="text-yellow-400"> (${pl.points.toFixed(2)})</span>`
+                        : ""
+                    }
+                  </span>
+                `
+                    )
+                    .join("")
+                : `<span class="text-[10px] text-gray-600 italic">No players drafted</span>`
+            }
+          </div>
+        `;
+        userStatsEl.appendChild(div);
+      });
+    });
+
+    // Restore user selection
+    window.onload = () => {
+      const saved = localStorage.getItem("ao_user");
+      if (saved && USERS.includes(saved)) {
+        currentUser = saved;
+        userSelect.value = saved;
+      }
+    };
+  </script>
+</body>
+</html>
