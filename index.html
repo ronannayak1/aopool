@@ -28,7 +28,7 @@
           AUSTRALIAN OPEN <span class="accent-teal">FANTASY DRAFT</span>
         </h1>
         <div class="text-xs text-gray-500 flex items-center gap-1">
-          <span class="w-2 h-2 rounded-full bg-green-500"></span> Live Snake Draft (<span id="num-users-display">4</span> users)
+          <span class="w-2 h-2 rounded-full bg-green-500"></span> Live Snake Draft (<span id="num-users-display">4</span> users, 32 players each)
         </div>
       </div>
 
@@ -88,7 +88,7 @@
           <span>Click "Draft" to assign player to the team currently on the clock.</span>
           <span id="snake-order-display">Snake order: 1 → 2 → 3 → 4 → 4 → 3 → 2 → 1</span>
         </div>
-        <div id="player-list" class="grid grid-cols-1 md:grid-cols-3 gap-2 max-h-[70vh] overflow-y-auto"></div>
+        <div id="player-list" class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[70vh] overflow-y-auto"></div>
       </div>
     </div>
   </main>
@@ -201,7 +201,6 @@
       { id: 117, name: "J. Faria", seed: "", country: "portugal", hyperlink: "https://ausopen.com/players/portugal/jaime-faria#!stats" },
       { id: 62, name: "M. Arnaldi", seed: "", country: "italy", hyperlink: "https://ausopen.com/players/italy/matteo-arnaldi#!stats" },
       { id: 13, name: "A. Rublev", seed: 13, country: "russia", hyperlink: "https://ausopen.com/players/russia/andrey-rublev#!stats" },
-      { id: 11, name: "D. Medvedev", seed: 11, country: "russia", hyperlink: "https://ausopen.com/players/russia/daniil-medvedev#!stats" },
       { id: 70, name: "J. De Jong", seed: "", country: "netherlands", hyperlink: "https://ausopen.com/players/netherlands/jesper-de-jong#!stats" },
       { id: 106, name: "Q. Halys", seed: "", country: "france", hyperlink: "https://ausopen.com/players/france/quentin-halys#!stats" },
       { id: 78, name: "A. Tabilo", seed: "", country: "chile", hyperlink: "https://ausopen.com/players/chile/alejandro-tabilo#!stats" },
@@ -979,7 +978,19 @@
         const currentMatchup = snap.val();
         const previousWinnerId = currentMatchup?.winnerId;
         
-        // If there was a previous winner and it's different from the new winner, remove their points
+        // === NEW LOGIC: DESELECT IF ALREADY SELECTED ===
+        if (previousWinnerId === playerId) {
+            // 1. Remove points and win count
+            removeWinFromPlayer(playerId, round);
+            // 2. Clear winner in the bracket DB
+            db.ref(`/bracket/round${round}/${matchKey}`).update({ winnerId: null });
+            
+            setTimeout(refreshBracket, 200);
+            return; // Stop here
+        }
+        // ===============================================
+
+        // Standard logic: Switching winner from Player A to Player B
         if (previousWinnerId && previousWinnerId !== playerId) {
           removeWinFromPlayer(previousWinnerId, round);
         }
@@ -991,10 +1002,10 @@
           return matchup;
         });
 
-        // Record the win for scoring (only if it's a new win, not already recorded)
+        // Record the win for scoring
         recordWinForPlayer(playerId, round, previousWinnerId === playerId);
         
-        // Generate next round matchups if all matches in current round are complete
+        // Generate next round matchups
         setTimeout(() => {
           generateNextRoundMatchups(round);
           refreshBracket();
@@ -1003,10 +1014,25 @@
     }
 
     function selectBracketWinnerDirect(playerId, round) {
-      // This function is deprecated in favor of proper matchups
-      // But keep it for backwards compatibility with the old UI
-      recordWinForPlayer(playerId, round);
-      setTimeout(refreshBracket, 100);
+      // Check if player has already won this round to determine if we add or remove
+      db.ref("/").once("value", snap => {
+          const data = snap.val();
+          if (!data || !data.players) return;
+          
+          const player = data.players.find(p => p.id === playerId);
+          if (!player) return;
+          
+          const roundsWon = player.roundsWon || [];
+          
+          if (roundsWon.includes(round)) {
+              // Player already won -> DESELECT (Remove win)
+              removeWinFromPlayer(playerId, round);
+          } else {
+              // Player hasn't won yet -> SELECT (Add win)
+              recordWinForPlayer(playerId, round);
+          }
+          setTimeout(refreshBracket, 100);
+      });
     }
 
     function removeWinFromPlayer(playerId, round) {
