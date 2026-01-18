@@ -7,6 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet" />
   <style>
     body { background-color: #0d1117; color: #e6edf3; font-family: 'Inter', sans-serif; }
@@ -49,6 +50,18 @@
               class="bg-gray-800 border border-gray-700 text-sm rounded-lg p-2 w-16 text-center focus:ring-teal-500 focus:border-teal-500"
               onchange="updateNumUsers(this.value)"
             />
+          </div>
+          <div id="auth-status-container" class="flex items-center gap-2">
+            <button 
+              id="sign-in-btn"
+              onclick="loginAndSave()"
+              class="text-[10px] text-teal-400 hover:text-teal-200 uppercase font-bold tracking-widest border border-teal-800 px-2 py-1 rounded hover:bg-teal-900 transition"
+            >
+              Sign In with Google
+            </button>
+            <div id="user-info" class="hidden text-[10px] text-gray-400">
+              <span id="user-email"></span>
+            </div>
           </div>
         </div>
       </div>
@@ -181,6 +194,8 @@
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
+    const auth = firebase.auth(); // Initialize Auth
+    const provider = new firebase.auth.GoogleAuthProvider(); // Use Google to sign in
 
     // ==== SCORING TABLE ====
     const ROUND_POINTS = {
@@ -1236,16 +1251,96 @@
       });
     }
 
-    // Make functions available globally
-    window.selectBracketWinner = selectBracketWinner;
-    window.selectBracketWinnerDirect = selectBracketWinnerDirect;
+    // Calculate maximum remaining points for a user based on their active players
+    function calculateMaxRemainingPoints(user, allPlayers, bracketData) {
+      if (!user.picks || user.picks.length === 0) return 0;
 
-    // ===== TEAMS PAGE LOGIC =====
-    const teamsContainer = document.getElementById("teams-container");
+      // 1. Identify User's Active Players and determine their elimination status by round
+      const playerStatus = {}; // { playerId: { eliminatedInRound: null or round number } }
+      
+      user.picks.forEach(playerId => {
+        const player = allPlayers.find(p => p.id === playerId);
+        if (!player) return;
 
+        let eliminatedInRound = null;
+        
+        // Check bracket data to see if/when player was eliminated
+        if (bracketData) {
+          for (let r = 1; r <= 7; r++) {
+            const roundKey = `round${r}`;
+            if (!bracketData[roundKey]) continue;
+            
+            Object.values(bracketData[roundKey]).forEach(match => {
+              if (match.winnerId) {
+                // If match is over, and player was in it but didn't win -> eliminated in this round
+                if ((match.player1Id === playerId || match.player2Id === playerId) && match.winnerId !== playerId) {
+                  eliminatedInRound = r;
+                }
+              }
+            });
+          }
+        }
+        
+        playerStatus[playerId] = { 
+          player: player,
+          eliminatedInRound: eliminatedInRound
+        };
+      });
+
+      // 2. Calculate which bracket slots each active player can reach in each round
+      // Round structure: R1 has 64 matches (1-64), R2 has 32 matches (1-32), ..., R7 has 1 match (1)
+      // A player with ID maps to a match slot: ceil(ID / 2^round)
+      
+      let maxRemaining = 0;
+      
+      // For each round 1-7
+      for (let round = 1; round <= 7; round++) {
+        const pointsForRound = ROUND_POINTS[round];
+        const totalMatchesInRound = Math.floor(128 / Math.pow(2, round)); // 64, 32, 16, 8, 4, 2, 1
+        
+        // Track which match slots could be won by user's players
+        const matchSlotsWithContenders = new Set();
+        
+        // For each of user's players
+        Object.values(playerStatus).forEach(({ player, eliminatedInRound }) => {
+          // Skip if player was eliminated before this round
+          if (eliminatedInRound !== null && eliminatedInRound < round) {
+            return;
+          }
+          
+          // Calculate which match slot this player is in for this round
+          const matchSlot = Math.ceil(player.id / Math.pow(2, round));
+          
+          // Only count if match slot is valid and player could still win this round
+          if (matchSlot >= 1 && matchSlot <= totalMatchesInRound) {
+            // Check if this match is already decided (points already banked)
+            const roundKey = `round${round}`;
+            const existingMatch = bracketData && bracketData[roundKey] && bracketData[roundKey][matchSlot];
+            
+            if (!existingMatch || !existingMatch.winnerId) {
+              // Match not decided yet, player can potentially win it
+              matchSlotsWithContenders.add(matchSlot);
+            }
+          }
+        });
+        
+        // Add points for each match slot with a contender
+        // Note: If multiple players from same team are in same match slot, only count once
+        // (this is already handled by using a Set)
+        maxRemaining += matchSlotsWithContenders.size * pointsForRound;
+      }
+
+      return maxRemaining;
+    }
+
+    // UPDATE THIS FUNCTION
     function refreshTeams() {
-      db.ref("/").once("value", snap => {
-        const data = snap.val();
+      // Fetch main data and bracket data separately
+      Promise.all([
+        db.ref("/").once("value"),
+        db.ref("/bracket").once("value")
+      ]).then(([mainSnap, bracketSnap]) => {
+        const data = mainSnap.val();
         if (!data) {
           teamsContainer.innerHTML = "<div class='text-gray-400'>No data available.</div>";
           return;
@@ -1253,20 +1348,25 @@
 
         const players = data.players || [];
         const users = data.users || {};
+        const bracket = bracketSnap.val() || {};
 
-        teamsContainer.innerHTML = "";
+        teamsContainer.innerHTML = "";
 
-        // Sort users by score descending
-        const sortedUsers = USERS.slice().sort((a, b) => {
-          const scoreA = users[a]?.score || 0;
-          const scoreB = users[b]?.score || 0;
-          return scoreB - scoreA;
-        });
+        // Sort users by score descending
+        const sortedUsers = USERS.slice().sort((a, b) => {
+          const scoreA = users[a]?.score || 0;
+          const scoreB = users[b]?.score || 0;
+          return scoreB - scoreA;
+        });
 
-        sortedUsers.forEach((u, idx) => {
-          const user = users[u] || { picks: [], score: 0 };
-          const pickedPlayers = players.filter(p => p.owner === u).sort((a, b) => (b.points || 0) - (a.points || 0));
-          const isViewing = currentUser === u;
+        sortedUsers.forEach((u, idx) => {
+          const user = users[u] || { picks: [], score: 0 };
+          const pickedPlayers = players.filter(p => p.owner === u).sort((a, b) => (b.points || 0) - (a.points || 0));
+          const isViewing = currentUser === u;
+
+          // Calculate Remaining Points
+          const remaining = calculateMaxRemainingPoints(user, players, bracket);
+          const remainingDisplay = (isNaN(remaining) || remaining === null || remaining === undefined) ? 0 : remaining;
 
           const div = document.createElement("div");
           div.className = `sleeper-card rounded-xl p-4 border ${isViewing ? 'border-teal-500' : 'border-gray-700'}`;
@@ -1277,21 +1377,26 @@
                 <div class="text-lg font-bold ${isViewing ? 'text-teal-400' : 'text-white'}">
                   ${idx === 0 ? '🥇 ' : idx === 1 ? '🥈 ' : idx === 2 ? '🥉 ' : ''}${u}
                 </div>
-                <div class="text-xs text-gray-400 mt-1">${pickedPlayers.length}/${ROSTER_SIZE} players</div>
+                <div class="text-xs text-gray-400 mt-1 flex gap-2">
+                   <span>${pickedPlayers.length}/${ROSTER_SIZE} players</span>
+                </div>
               </div>
               <div class="text-right">
                 <div class="font-mono text-2xl font-bold text-teal-400">${(user.score || 0).toFixed(3)}</div>
-                <div class="text-[10px] text-gray-500">points</div>
+                <div class="text-[10px] text-gray-500">
+                    + ${remainingDisplay.toFixed(2)} max rem
+                </div>
               </div>
             </div>
-            <div class="space-y-2 max-h-96 overflow-y-auto">
-              ${pickedPlayers.length
-                ? pickedPlayers.map(pl => {
+            <div class="space-y-2 max-h-96 overflow-y-auto">
+              ${pickedPlayers.length
+                ? pickedPlayers.map(pl => {
                     const seedText = pl.seed ? `[${pl.seed}] ` : '';
                     const pointsText = pl.points && pl.points > 0 ? `<span class="text-teal-400">${pl.points.toFixed(2)} pts</span>` : '<span class="text-gray-500">0 pts</span>';
                     const isEliminated = pl.eliminated || false;
                     const eliminatedClass = isEliminated ? 'opacity-40 line-through' : '';
                     const eliminatedBadge = isEliminated ? '<div class="text-[10px] text-red-400 font-bold">ELIMINATED</div>' : '';
+
                     return `
                       <div class="flex justify-between items-center p-2 bg-gray-900 rounded border ${isEliminated ? 'border-red-700' : 'border-gray-700'} ${eliminatedClass}">
                         <div>
@@ -1302,16 +1407,86 @@
                         <div class="text-xs">${pointsText}</div>
                       </div>
                     `;
-                  }).join("")
-                : `<div class="text-center py-4 text-gray-500 text-sm">No players drafted</div>`
-              }
+                  }).join("")
+                : `<div class="text-center py-4 text-gray-500 text-sm">No players drafted</div>`
+              }
             </div>
           `;
           
           teamsContainer.appendChild(div);
         });
+      }).catch(error => {
+        console.error("Error loading teams data:", error);
+        teamsContainer.innerHTML = "<div class='text-gray-400'>Error loading data.</div>";
       });
     }
+
+    // ===== AUTHENTICATION =====
+    // Update auth UI based on authentication state
+    function updateAuthUI(user) {
+      const signInBtn = document.getElementById("sign-in-btn");
+      const userInfo = document.getElementById("user-info");
+      const userEmail = document.getElementById("user-email");
+      
+      if (user) {
+        // User is signed in
+        if (signInBtn) signInBtn.style.display = "none";
+        if (userInfo) userInfo.classList.remove("hidden");
+        if (userEmail) userEmail.textContent = user.email;
+        console.log("User signed in:", user.email, "UID:", user.uid);
+      } else {
+        // User is signed out
+        if (signInBtn) signInBtn.style.display = "block";
+        if (userInfo) userInfo.classList.add("hidden");
+        if (userEmail) userEmail.textContent = "";
+        console.log("User signed out");
+      }
+    }
+    
+    // Listen for auth state changes
+    auth.onAuthStateChanged((user) => {
+      updateAuthUI(user);
+    });
+    
+    // Login function for Firebase Authentication (using compat mode)
+    window.loginAndSave = function() {
+      auth.signInWithPopup(provider)
+        .then((result) => {
+          // The user is now signed in!
+          const user = result.user;
+          
+          // UI will be updated automatically by onAuthStateChanged
+          // You can now use the authenticated user for database operations
+          // Firebase will check user.uid against your Security Rules
+          
+          // Optional: Refresh the current page to ensure bracket is editable
+          const currentPage = localStorage.getItem('ao_active_page') || 'draft';
+          if (currentPage === 'bracket') {
+            refreshBracket();
+          }
+        }).catch((error) => {
+          console.error("Login failed", error);
+          alert("Login failed: " + error.message);
+        });
+    };
+    
+    // Sign out function (optional)
+    window.signOut = function() {
+      auth.signOut()
+        .then(() => {
+          console.log("User signed out");
+          // UI will be updated automatically by onAuthStateChanged
+        }).catch((error) => {
+          console.error("Sign out failed", error);
+        });
+    };
+
+    // Make functions available globally
+    window.selectBracketWinner = selectBracketWinner;
+    window.selectBracketWinnerDirect = selectBracketWinnerDirect;
+
+    // ===== TEAMS PAGE LOGIC =====
+    const teamsContainer = document.getElementById("teams-container");
 
     // Restore user selection and active page
     window.onload = () => {
