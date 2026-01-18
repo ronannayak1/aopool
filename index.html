@@ -60,6 +60,9 @@
       </div>
     </div>
     <div class="max-w-7xl mx-auto mt-4 flex gap-1 border-t border-gray-800 pt-4">
+      <button onclick="showPage('profile')" id="nav-profile" class="nav-btn px-4 py-2 text-sm font-bold uppercase tracking-widest text-gray-400 hover:text-teal-400 rounded-t transition">
+        Profile
+      </button>
       <button onclick="showPage('draft')" id="nav-draft" class="nav-btn px-4 py-2 text-sm font-bold uppercase tracking-widest bg-teal-500 text-slate-900 rounded-t">
         Draft
       </button>
@@ -71,6 +74,46 @@
       </button>
     </div>
   </nav>
+
+  <!-- PROFILE PAGE -->
+  <main id="page-profile" class="page-content max-w-7xl mx-auto p-4 hidden">
+    <div class="max-w-md mx-auto mt-16">
+      <div class="sleeper-card rounded-xl p-8 space-y-6">
+        <div class="text-center">
+          <h2 class="text-2xl font-bold mb-2">Select Your Profile</h2>
+          <p class="text-sm text-gray-400">Choose which user you are</p>
+        </div>
+        
+        <div class="space-y-4">
+          <div>
+            <label for="profile-user-select" class="block text-sm font-bold uppercase tracking-widest text-gray-400 mb-2">
+              Select User
+            </label>
+            <select 
+              id="profile-user-select" 
+              class="w-full bg-gray-800 border border-gray-700 text-sm rounded-lg p-3 focus:ring-teal-500 focus:border-teal-500"
+            >
+              <option value="">-- Select User --</option>
+            </select>
+          </div>
+          
+          <button 
+            id="profile-confirm-btn"
+            onclick="confirmProfile()"
+            class="w-full btn-main px-4 py-3 rounded-lg text-sm uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled
+          >
+            Confirm Profile
+          </button>
+          
+          <div id="profile-confirmed-message" class="hidden text-center">
+            <div class="text-teal-400 font-bold text-sm">✓ Profile confirmed as <span id="profile-confirmed-name"></span></div>
+            <div class="text-xs text-gray-500 mt-2">You cannot change your profile during this session</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
 
   <!-- DRAFT PAGE -->
   <main id="page-draft" class="page-content max-w-7xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -356,6 +399,12 @@
         if (user === currentUser) option.selected = true;
         userSelect.appendChild(option);
       });
+      
+      // Update profile dropdown if it exists
+      const profileSelectEl = document.getElementById("profile-user-select");
+      if (profileSelectEl) {
+        populateProfileDropdown();
+      }
       
       // Update UI displays
       document.getElementById("num-users-display").textContent = NUM_USERS;
@@ -694,7 +743,16 @@
     });
 
     // ===== PAGE NAVIGATION =====
+    function isProfileConfirmed() {
+      return localStorage.getItem('ao_profile_confirmed') === 'true';
+    }
+
     function showPage(page) {
+      // Check if profile is confirmed before allowing access to other pages
+      if (page !== 'profile' && !isProfileConfirmed()) {
+        page = 'profile';
+      }
+
       // Hide all pages
       document.querySelectorAll('.page-content').forEach(el => el.classList.add('hidden'));
       // Show selected page
@@ -706,11 +764,15 @@
         btn.classList.add('text-gray-400');
       });
       const activeBtn = document.getElementById(`nav-${page}`);
-      activeBtn.classList.remove('text-gray-400');
-      activeBtn.classList.add('bg-teal-500', 'text-slate-900');
+      if (activeBtn) {
+        activeBtn.classList.remove('text-gray-400');
+        activeBtn.classList.add('bg-teal-500', 'text-slate-900');
+      }
 
-      // Store active page
-      localStorage.setItem('ao_active_page', page);
+      // Store active page (only if profile is confirmed)
+      if (isProfileConfirmed() || page === 'profile') {
+        localStorage.setItem('ao_active_page', page);
+      }
 
       // Refresh bracket if showing bracket page
       if (page === 'bracket') {
@@ -723,6 +785,70 @@
         refreshTeams();
       }
     }
+
+    // ===== PROFILE PAGE LOGIC =====
+    const profileUserSelect = document.getElementById("profile-user-select");
+    const profileConfirmBtn = document.getElementById("profile-confirm-btn");
+    const profileConfirmedMessage = document.getElementById("profile-confirmed-message");
+    const profileConfirmedName = document.getElementById("profile-confirmed-name");
+
+    // Populate profile dropdown with users
+    function populateProfileDropdown() {
+      profileUserSelect.innerHTML = '<option value="">-- Select User --</option>';
+      USERS.forEach(user => {
+        const option = document.createElement("option");
+        option.value = user;
+        option.textContent = user;
+        profileUserSelect.appendChild(option);
+      });
+    }
+
+    // Enable/disable confirm button based on selection
+    profileUserSelect.addEventListener("change", e => {
+      profileConfirmBtn.disabled = !e.target.value;
+    });
+
+    function confirmProfile() {
+      const selectedUser = profileUserSelect.value;
+      if (!selectedUser || !USERS.includes(selectedUser)) {
+        alert("Please select a valid user");
+        return;
+      }
+
+      // Set confirmed user
+      currentUser = selectedUser;
+      localStorage.setItem("ao_user", selectedUser);
+      localStorage.setItem("ao_profile_confirmed", "true");
+
+      // Update the user select dropdown in nav
+      userSelect.value = selectedUser;
+
+      // Disable profile page
+      profileUserSelect.disabled = true;
+      profileConfirmBtn.disabled = true;
+      profileConfirmBtn.classList.add("opacity-50", "cursor-not-allowed");
+
+      // Show confirmed message
+      profileConfirmedMessage.classList.remove("hidden");
+      profileConfirmedName.textContent = selectedUser;
+
+      // Hide profile nav button
+      const profileNavBtn = document.getElementById("nav-profile");
+      if (profileNavBtn) {
+        profileNavBtn.style.display = "none";
+      }
+
+      // Switch to draft page
+      setTimeout(() => {
+        showPage('draft');
+      }, 500);
+    }
+
+    // Make confirmProfile available globally
+    window.confirmProfile = confirmProfile;
+
+    // Initialize profile dropdown
+    populateProfileDropdown();
 
     // ===== BRACKET PAGE LOGIC =====
     const bracketRoundSelect = document.getElementById("bracket-round-select");
@@ -985,14 +1111,28 @@
             // 2. Clear winner in the bracket DB
             db.ref(`/bracket/round${round}/${matchKey}`).update({ winnerId: null });
             
+            // 3. Un-mark the opponent as eliminated (they're back in)
+            const opponentId = currentMatchup.player1Id === playerId ? currentMatchup.player2Id : currentMatchup.player1Id;
+            if (opponentId) {
+              markPlayerEliminated(opponentId, false);
+            }
+            
             setTimeout(refreshBracket, 200);
             return; // Stop here
         }
         // ===============================================
 
+        // Determine the opponent (loser) for the new winner
+        const opponentId = currentMatchup.player1Id === playerId ? currentMatchup.player2Id : currentMatchup.player1Id;
+
         // Standard logic: Switching winner from Player A to Player B
         if (previousWinnerId && previousWinnerId !== playerId) {
           removeWinFromPlayer(previousWinnerId, round);
+          // Un-mark the previous opponent (old winner's opponent) as eliminated
+          const previousOpponentId = currentMatchup.player1Id === previousWinnerId ? currentMatchup.player2Id : currentMatchup.player1Id;
+          if (previousOpponentId) {
+            markPlayerEliminated(previousOpponentId, false);
+          }
         }
         
         // Update the matchup with the new winner
@@ -1004,6 +1144,11 @@
 
         // Record the win for scoring
         recordWinForPlayer(playerId, round, previousWinnerId === playerId);
+        
+        // Mark the opponent as eliminated
+        if (opponentId) {
+          markPlayerEliminated(opponentId, true, round);
+        }
         
         // Generate next round matchups
         setTimeout(() => {
@@ -1063,6 +1208,29 @@
 
         data.players = players;
         data.users = users;
+        return data;
+      });
+    }
+
+    function markPlayerEliminated(playerId, eliminated, round = null) {
+      db.ref("/").transaction(data => {
+        if (!data || !data.players) return data;
+
+        const players = data.players;
+        const pIndex = players.findIndex(p => p.id === playerId);
+        if (pIndex === -1) return data;
+
+        if (eliminated) {
+          players[pIndex].eliminated = true;
+          if (round) {
+            players[pIndex].eliminatedRound = round;
+          }
+        } else {
+          players[pIndex].eliminated = false;
+          players[pIndex].eliminatedRound = null;
+        }
+
+        data.players = players;
         return data;
       });
     }
@@ -1158,11 +1326,15 @@
                 ? pickedPlayers.map(pl => {
                     const seedText = pl.seed ? `[${pl.seed}] ` : '';
                     const pointsText = pl.points && pl.points > 0 ? `<span class="text-teal-400">${pl.points.toFixed(2)} pts</span>` : '<span class="text-gray-500">0 pts</span>';
+                    const isEliminated = pl.eliminated || false;
+                    const eliminatedClass = isEliminated ? 'opacity-40 line-through' : '';
+                    const eliminatedBadge = isEliminated ? '<div class="text-[10px] text-red-400 font-bold">ELIMINATED</div>' : '';
                     return `
-                      <div class="flex justify-between items-center p-2 bg-gray-900 rounded border border-gray-700">
+                      <div class="flex justify-between items-center p-2 bg-gray-900 rounded border ${isEliminated ? 'border-red-700' : 'border-gray-700'} ${eliminatedClass}">
                         <div>
                           <div class="text-sm font-bold">${seedText}${pl.name}</div>
                           <div class="text-[10px] text-gray-400">Wins: ${pl.totalWins || 0}</div>
+                          ${eliminatedBadge}
                         </div>
                         <div class="text-xs">${pointsText}</div>
                       </div>
@@ -1180,14 +1352,40 @@
 
     // Restore user selection and active page
     window.onload = () => {
-      const saved = localStorage.getItem("ao_user");
-      if (saved && USERS.includes(saved)) {
-        currentUser = saved;
-        userSelect.value = saved;
-      }
+      // Check if profile is confirmed
+      const isConfirmed = isProfileConfirmed();
       
-      const savedPage = localStorage.getItem('ao_active_page') || 'draft';
-      showPage(savedPage);
+      if (isConfirmed) {
+        // Profile already confirmed - restore saved user
+        const saved = localStorage.getItem("ao_user");
+        if (saved && USERS.includes(saved)) {
+          currentUser = saved;
+          userSelect.value = saved;
+        }
+        
+        // Hide profile nav button
+        const profileNavBtn = document.getElementById("nav-profile");
+        if (profileNavBtn) {
+          profileNavBtn.style.display = "none";
+        }
+        
+        // Show profile as confirmed (if profile page is visible)
+        profileUserSelect.disabled = true;
+        profileConfirmBtn.disabled = true;
+        profileConfirmBtn.classList.add("opacity-50", "cursor-not-allowed");
+        if (saved) {
+          profileConfirmedMessage.classList.remove("hidden");
+          profileConfirmedName.textContent = saved;
+          profileUserSelect.value = saved;
+        }
+        
+        // Show saved page
+        const savedPage = localStorage.getItem('ao_active_page') || 'draft';
+        showPage(savedPage);
+      } else {
+        // Profile not confirmed - show profile page
+        showPage('profile');
+      }
     };
   </script>
 </body>
