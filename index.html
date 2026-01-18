@@ -50,16 +50,13 @@
               onchange="updateNumUsers(this.value)"
             />
           </div>
-          <select id="user-select" class="bg-gray-800 border border-gray-700 text-sm rounded-lg p-2 focus:ring-teal-500">
-            <option value="">View As User...</option>
-          </select>
-          <button onclick="resetDraft()" class="text-[10px] text-gray-500 hover:text-red-500 uppercase font-bold tracking-widest">
-            Reset Draft
-          </button>
         </div>
       </div>
     </div>
     <div class="max-w-7xl mx-auto mt-4 flex gap-1 border-t border-gray-800 pt-4">
+      <button onclick="showPage('profile')" id="nav-profile" class="nav-btn px-4 py-2 text-sm font-bold uppercase tracking-widest text-gray-400 hover:text-teal-400 rounded-t transition">
+        Profile
+      </button>
       <button onclick="showPage('draft')" id="nav-draft" class="nav-btn px-4 py-2 text-sm font-bold uppercase tracking-widest bg-teal-500 text-slate-900 rounded-t">
         Draft
       </button>
@@ -71,6 +68,45 @@
       </button>
     </div>
   </nav>
+
+  <!-- PROFILE PAGE -->
+  <main id="page-profile" class="page-content max-w-7xl mx-auto p-4 hidden">
+    <div class="max-w-md mx-auto mt-16">
+      <div class="sleeper-card rounded-xl p-8 space-y-6">
+        <div class="text-center">
+          <h2 class="text-2xl font-bold mb-2">Select Your Profile</h2>
+          <p class="text-sm text-gray-400">Choose which user you are</p>
+        </div>
+        
+        <div class="space-y-4">
+          <div>
+            <label for="profile-user-select" class="block text-sm font-bold uppercase tracking-widest text-gray-400 mb-2">
+              Select User
+            </label>
+            <select 
+              id="profile-user-select" 
+              class="w-full bg-gray-800 border border-gray-700 text-sm rounded-lg p-3 focus:ring-teal-500 focus:border-teal-500"
+            >
+              <option value="">-- Select User --</option>
+            </select>
+          </div>
+          
+          <button 
+            id="profile-confirm-btn"
+            onclick="confirmProfile()"
+            class="w-full btn-main px-4 py-3 rounded-lg text-sm uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Confirm Profile
+          </button>
+          
+          <div id="profile-confirmed-message" class="hidden text-center">
+            <div class="text-teal-400 font-bold text-sm">✓ Profile confirmed as <span id="profile-confirmed-name"></span></div>
+            <div class="text-xs text-gray-500 mt-2">You cannot change your profile during this session</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
 
   <!-- DRAFT PAGE -->
   <main id="page-draft" class="page-content max-w-7xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -296,9 +332,15 @@
     const ROSTER_SIZE = 32; 
     const TOTAL_PICKS = initialPlayers.length; 
 
-    // Current user dropdown (for highlighting UI only)
-    let currentUser = USERS[0];
-    const userSelect = document.getElementById("user-select");
+    // Current user (set via profile confirmation)
+    let currentUser = null;
+    // Try to load from localStorage first, otherwise default to first user
+    const savedUser = localStorage.getItem("ao_user");
+    if (savedUser && USERS.includes(savedUser)) {
+      currentUser = savedUser;
+    } else {
+      currentUser = USERS[0];
+    }
     const numUsersInput = document.getElementById("num-users-input");
     
     // Function to update number of users
@@ -340,22 +382,18 @@
       // If current user no longer exists, reset to first user
       if (!USERS.includes(currentUser)) {
         currentUser = USERS[0];
-        userSelect.value = currentUser;
         localStorage.setItem("ao_user", currentUser);
       }
     }
     
     // Function to refresh all user-related UI
     function refreshUsersUI() {
-      // Update user select dropdown
-      userSelect.innerHTML = '<option value="">View As User...</option>';
-      USERS.forEach(user => {
-        const option = document.createElement("option");
-        option.value = user;
-        option.textContent = user;
-        if (user === currentUser) option.selected = true;
-        userSelect.appendChild(option);
-      });
+      
+      // Update profile dropdown if it exists
+      const profileSelectEl = document.getElementById("profile-user-select");
+      if (profileSelectEl) {
+        populateProfileDropdown();
+      }
       
       // Update UI displays
       document.getElementById("num-users-display").textContent = NUM_USERS;
@@ -369,13 +407,6 @@
     
     // Populate user select dropdown initially
     refreshUsersUI();
-    
-    userSelect.addEventListener("change", e => {
-      currentUser = e.target.value;
-      localStorage.setItem("ao_user", currentUser);
-      // We do NOT stop you from drafting if you selected the wrong user.
-      // We assume "Commissioner Mode".
-    });
     
     // Load NUM_USERS from Firebase on startup
     db.ref("/settings/numUsers").on("value", snap => {
@@ -528,7 +559,6 @@
 
     // ===== REALTIME RENDERING =====
     const playerListEl = document.getElementById("player-list");
-    const userStatsEl = document.getElementById("user-stats-container");
     const draftStatusEl = document.getElementById("draft-status");
     const playerCountEl = document.getElementById("player-count");
     const winnerSelectEl = document.getElementById("winner-select");
@@ -632,56 +662,7 @@
         winnerSelectEl.appendChild(opt);
       });
 
-      // USER STATS
-      userStatsEl.innerHTML = "";
-      USERS.forEach(u => {
-        const user = users[u] || { picks: [], score: 0 };
-        // Highlight if this is the user currently viewing OR if it's their turn to draft
-        const isViewing = currentUser === u;
-        const isOnClock = (u === drafter) && !draft.finished;
-        
-        const pickedPlayers = players.filter(p => p.owner === u);
-
-        let borderClass = "border-gray-800";
-        if (isOnClock) borderClass = "border-teal-500 ring-1 ring-teal-500"; 
-        else if (isViewing) borderClass = "border-gray-600";
-
-        const div = document.createElement("div");
-        div.className = `p-3 rounded-lg border ${borderClass} bg-[#161b22] relative transition-all duration-300`;
-        
-        div.innerHTML = `
-          <div class="flex justify-between items-center mb-2">
-            <div class="text-sm font-bold ${isOnClock ? "text-teal-400 animate-pulse" : "text-gray-300"}">
-              ${u} ${isOnClock ? "(PICKING)" : ""}
-            </div>
-            <div class="text-right text-xs">
-              <div class="font-mono text-lg font-bold">${(user.score || 0).toFixed(3)} pts</div>
-              <div class="text-[10px] text-gray-500">${pickedPlayers.length}/${ROSTER_SIZE} players</div>
-            </div>
-          </div>
-          <div class="flex flex-wrap gap-1 max-h-40 overflow-y-auto">
-            ${
-              pickedPlayers.length
-                ? pickedPlayers
-                    .map(
-                      pl => `
-                  <span class="text-[9px] bg-gray-900 border border-gray-700 px-2 py-0.5 rounded text-gray-200">
-                    ${pl.seed ? "[" + pl.seed + "] " : ""}${pl.name}
-                    ${
-                      pl.points && pl.points > 0
-                        ? `<span class="text-yellow-400"> (${pl.points.toFixed(2)})</span>`
-                        : ""
-                    }
-                  </span>
-                `
-                    )
-                    .join("")
-                : `<span class="text-[10px] text-gray-600 italic">No players drafted</span>`
-            }
-          </div>
-        `;
-        userStatsEl.appendChild(div);
-      });
+      // Note: User stats display removed - now shown on Teams page
 
       // Refresh other pages if they're currently visible
       const activePage = localStorage.getItem('ao_active_page') || 'draft';
@@ -694,7 +675,16 @@
     });
 
     // ===== PAGE NAVIGATION =====
+    function isProfileConfirmed() {
+      return localStorage.getItem('ao_profile_confirmed') === 'true';
+    }
+
     function showPage(page) {
+      // Check if profile is confirmed before allowing access to other pages
+      if (page !== 'profile' && !isProfileConfirmed()) {
+        page = 'profile';
+      }
+
       // Hide all pages
       document.querySelectorAll('.page-content').forEach(el => el.classList.add('hidden'));
       // Show selected page
@@ -706,11 +696,15 @@
         btn.classList.add('text-gray-400');
       });
       const activeBtn = document.getElementById(`nav-${page}`);
-      activeBtn.classList.remove('text-gray-400');
-      activeBtn.classList.add('bg-teal-500', 'text-slate-900');
+      if (activeBtn) {
+        activeBtn.classList.remove('text-gray-400');
+        activeBtn.classList.add('bg-teal-500', 'text-slate-900');
+      }
 
-      // Store active page
-      localStorage.setItem('ao_active_page', page);
+      // Store active page (only if profile is confirmed)
+      if (isProfileConfirmed() || page === 'profile') {
+        localStorage.setItem('ao_active_page', page);
+      }
 
       // Refresh bracket if showing bracket page
       if (page === 'bracket') {
@@ -722,7 +716,102 @@
       if (page === 'teams') {
         refreshTeams();
       }
+      // Populate profile dropdown if showing profile page
+      if (page === 'profile') {
+        populateProfileDropdown();
+      }
     }
+
+    // ===== PROFILE PAGE LOGIC =====
+    const profileUserSelect = document.getElementById("profile-user-select");
+    const profileConfirmBtn = document.getElementById("profile-confirm-btn");
+    const profileConfirmedMessage = document.getElementById("profile-confirmed-message");
+    const profileConfirmedName = document.getElementById("profile-confirmed-name");
+
+    // Populate profile dropdown with users
+    function populateProfileDropdown() {
+      const selectEl = document.getElementById("profile-user-select");
+      if (!selectEl) return; // Element not ready yet
+      
+      selectEl.innerHTML = '<option value="">-- Select User --</option>';
+      if (USERS && USERS.length > 0) {
+        USERS.forEach(user => {
+          const option = document.createElement("option");
+          option.value = user;
+          option.textContent = user;
+          selectEl.appendChild(option);
+        });
+      }
+    }
+
+    // Enable/disable confirm button based on selection
+    if (profileUserSelect) {
+      profileUserSelect.addEventListener("change", e => {
+        if (profileConfirmBtn) {
+          profileConfirmBtn.disabled = !e.target.value;
+        }
+      });
+    }
+
+    function confirmProfile() {
+      const profileSelectEl = document.getElementById("profile-user-select");
+      if (!profileSelectEl) {
+        alert("Profile selection element not found");
+        return;
+      }
+      
+      const selectedUser = profileSelectEl.value;
+      if (!selectedUser || !USERS.includes(selectedUser)) {
+        alert("Please select a valid user");
+        return;
+      }
+
+      // Set confirmed user
+      currentUser = selectedUser;
+      localStorage.setItem("ao_user", selectedUser);
+      localStorage.setItem("ao_profile_confirmed", "true");
+
+      // Update the user select dropdown in nav if it exists
+      const userSelectEl = document.getElementById("user-select");
+      if (userSelectEl) {
+        userSelectEl.value = selectedUser;
+      }
+
+      // Disable profile page
+      profileSelectEl.disabled = true;
+      const confirmBtnEl = document.getElementById("profile-confirm-btn");
+      if (confirmBtnEl) {
+        confirmBtnEl.disabled = true;
+        confirmBtnEl.classList.add("opacity-50", "cursor-not-allowed");
+      }
+
+      // Show confirmed message
+      const msgEl = document.getElementById("profile-confirmed-message");
+      const nameEl = document.getElementById("profile-confirmed-name");
+      if (msgEl) {
+        msgEl.classList.remove("hidden");
+      }
+      if (nameEl) {
+        nameEl.textContent = selectedUser;
+      }
+
+      // Hide profile nav button
+      const profileNavBtn = document.getElementById("nav-profile");
+      if (profileNavBtn) {
+        profileNavBtn.style.display = "none";
+      }
+
+      // Switch to draft page
+      setTimeout(() => {
+        showPage('draft');
+      }, 500);
+    }
+
+    // Make confirmProfile available globally
+    window.confirmProfile = confirmProfile;
+
+    // Initialize profile dropdown
+    populateProfileDropdown();
 
     // ===== BRACKET PAGE LOGIC =====
     const bracketRoundSelect = document.getElementById("bracket-round-select");
@@ -985,14 +1074,28 @@
             // 2. Clear winner in the bracket DB
             db.ref(`/bracket/round${round}/${matchKey}`).update({ winnerId: null });
             
+            // 3. Un-mark the opponent as eliminated (they're back in)
+            const opponentId = currentMatchup.player1Id === playerId ? currentMatchup.player2Id : currentMatchup.player1Id;
+            if (opponentId) {
+              markPlayerEliminated(opponentId, false);
+            }
+            
             setTimeout(refreshBracket, 200);
             return; // Stop here
         }
         // ===============================================
 
+        // Determine the opponent (loser) for the new winner
+        const opponentId = currentMatchup.player1Id === playerId ? currentMatchup.player2Id : currentMatchup.player1Id;
+
         // Standard logic: Switching winner from Player A to Player B
         if (previousWinnerId && previousWinnerId !== playerId) {
           removeWinFromPlayer(previousWinnerId, round);
+          // Un-mark the previous opponent (old winner's opponent) as eliminated
+          const previousOpponentId = currentMatchup.player1Id === previousWinnerId ? currentMatchup.player2Id : currentMatchup.player1Id;
+          if (previousOpponentId) {
+            markPlayerEliminated(previousOpponentId, false);
+          }
         }
         
         // Update the matchup with the new winner
@@ -1004,6 +1107,11 @@
 
         // Record the win for scoring
         recordWinForPlayer(playerId, round, previousWinnerId === playerId);
+        
+        // Mark the opponent as eliminated
+        if (opponentId) {
+          markPlayerEliminated(opponentId, true, round);
+        }
         
         // Generate next round matchups
         setTimeout(() => {
@@ -1063,6 +1171,29 @@
 
         data.players = players;
         data.users = users;
+        return data;
+      });
+    }
+
+    function markPlayerEliminated(playerId, eliminated, round = null) {
+      db.ref("/").transaction(data => {
+        if (!data || !data.players) return data;
+
+        const players = data.players;
+        const pIndex = players.findIndex(p => p.id === playerId);
+        if (pIndex === -1) return data;
+
+        if (eliminated) {
+          players[pIndex].eliminated = true;
+          if (round) {
+            players[pIndex].eliminatedRound = round;
+          }
+        } else {
+          players[pIndex].eliminated = false;
+          players[pIndex].eliminatedRound = null;
+        }
+
+        data.players = players;
         return data;
       });
     }
@@ -1158,11 +1289,15 @@
                 ? pickedPlayers.map(pl => {
                     const seedText = pl.seed ? `[${pl.seed}] ` : '';
                     const pointsText = pl.points && pl.points > 0 ? `<span class="text-teal-400">${pl.points.toFixed(2)} pts</span>` : '<span class="text-gray-500">0 pts</span>';
+                    const isEliminated = pl.eliminated || false;
+                    const eliminatedClass = isEliminated ? 'opacity-40 line-through' : '';
+                    const eliminatedBadge = isEliminated ? '<div class="text-[10px] text-red-400 font-bold">ELIMINATED</div>' : '';
                     return `
-                      <div class="flex justify-between items-center p-2 bg-gray-900 rounded border border-gray-700">
+                      <div class="flex justify-between items-center p-2 bg-gray-900 rounded border ${isEliminated ? 'border-red-700' : 'border-gray-700'} ${eliminatedClass}">
                         <div>
                           <div class="text-sm font-bold">${seedText}${pl.name}</div>
                           <div class="text-[10px] text-gray-400">Wins: ${pl.totalWins || 0}</div>
+                          ${eliminatedBadge}
                         </div>
                         <div class="text-xs">${pointsText}</div>
                       </div>
@@ -1180,14 +1315,59 @@
 
     // Restore user selection and active page
     window.onload = () => {
-      const saved = localStorage.getItem("ao_user");
-      if (saved && USERS.includes(saved)) {
-        currentUser = saved;
-        userSelect.value = saved;
-      }
+      // Check if profile is confirmed
+      const isConfirmed = isProfileConfirmed();
       
-      const savedPage = localStorage.getItem('ao_active_page') || 'draft';
-      showPage(savedPage);
+      if (isConfirmed) {
+        // Profile already confirmed - restore saved user
+        const saved = localStorage.getItem("ao_user");
+        if (saved && USERS.includes(saved)) {
+          currentUser = saved;
+        }
+        
+        // Hide profile nav button
+        const profileNavBtn = document.getElementById("nav-profile");
+        if (profileNavBtn) {
+          profileNavBtn.style.display = "none";
+        }
+        
+        // Show profile as confirmed (if profile elements exist)
+        const profileSelectEl = document.getElementById("profile-user-select");
+        const profileBtnEl = document.getElementById("profile-confirm-btn");
+        const profileMsgEl = document.getElementById("profile-confirmed-message");
+        const profileNameEl = document.getElementById("profile-confirmed-name");
+        
+        if (profileSelectEl) {
+          profileSelectEl.disabled = true;
+          if (saved) profileSelectEl.value = saved;
+        }
+        if (profileBtnEl) {
+          profileBtnEl.disabled = true;
+          profileBtnEl.classList.add("opacity-50", "cursor-not-allowed");
+        }
+        if (saved && profileMsgEl) {
+          profileMsgEl.classList.remove("hidden");
+        }
+        if (saved && profileNameEl) {
+          profileNameEl.textContent = saved;
+        }
+        
+        // Show saved page (but only if it's not profile)
+        const savedPage = localStorage.getItem('ao_active_page') || 'draft';
+        if (savedPage !== 'profile') {
+          showPage(savedPage);
+        } else {
+          showPage('draft');
+        }
+      } else {
+        // Profile not confirmed - show profile page and clear any saved page
+        localStorage.removeItem('ao_active_page');
+        showPage('profile');
+        // Ensure dropdown is populated after a brief delay to ensure DOM is ready
+        setTimeout(() => {
+          populateProfileDropdown();
+        }, 100);
+      }
     };
   </script>
 </body>
