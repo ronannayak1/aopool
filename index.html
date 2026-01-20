@@ -1233,6 +1233,7 @@
           const user = users[u] || { picks: [], score: 0 };
           const pickedPlayers = players.filter(p => p.owner === u).sort((a, b) => (b.points || 0) - (a.points || 0));
           const isViewing = currentUser === u;
+          const activePlayers = pickedPlayers.filter(p => !p.eliminated);
 
           // Compute displayed score from player points (source of truth)
           const computedScore = pickedPlayers.reduce((sum, p) => sum + (p.points || 0), 0);
@@ -1250,9 +1251,9 @@
                 <div class="text-lg font-bold ${isViewing ? 'text-teal-400' : 'text-white'}">
                   ${idx === 0 ? '🥇 ' : idx === 1 ? '🥈 ' : idx === 2 ? '🥉 ' : ''}${u}
                 </div>
-                <div class="text-xs text-gray-400 mt-1 flex gap-2">
-                   <span>${pickedPlayers.length}/${ROSTER_SIZE} players</span>
-                </div>
+              <div class="text-xs text-gray-400 mt-1 flex gap-2">
+                 <span>${activePlayers.length} not eliminated</span>
+              </div>
               </div>
               <div class="text-right">
                 <div class="font-mono text-2xl font-bold text-teal-400">${computedScore.toFixed(3)}</div>
