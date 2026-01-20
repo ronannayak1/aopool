@@ -801,8 +801,10 @@
         }
 
         const players = data.players || [];
+        const users = data.users || {};
         const round = parseInt(bracketRoundSelect.value);
         const pointsForRound = ROUND_POINTS[round];
+        const getDisplayName = (id) => (users[id]?.teamName || id || "");
 
         // Get matchups for this round from Firebase
         db.ref(`/bracket/round${round}`).once("value", matchSnap => {
@@ -856,7 +858,7 @@
                       <div class="font-bold ${hasWonThisRound ? 'text-teal-400' : 'text-white'}">
                         ${seedText} ${p.name}
                       </div>
-                      <div class="text-[10px] text-gray-400 mt-1">${p.owner}</div>
+                      <div class="text-[10px] text-gray-400 mt-1">${getDisplayName(p.owner)}</div>
                       ${hasWonThisRound ? '<div class="text-[10px] text-teal-400 mt-1">✓ Won Round ' + round + '</div>' : ''}
                       ${roundsWon.length > 0 && !hasWonThisRound ? '<div class="text-[10px] text-gray-500 mt-1">Rounds won: ' + roundsWon.join(', ') + '</div>' : ''}
                     </div>
