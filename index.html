@@ -133,6 +133,24 @@
         <div class="text-[10px] text-gray-400 leading-relaxed mb-4">
           R1: 1 • R2: 1.5 • R3: 2.25 • R4: 3.375 • R5: 5.0625 • R6: 7.59375 • R7: 11.390625
         </div>
+        <div id="team-name-editor" class="sleeper-card rounded-xl p-4 flex flex-col sm:flex-row gap-3 sm:items-end hidden">
+          <div class="flex-1">
+            <label for="team-name-input" class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">Team Name</label>
+            <input
+              id="team-name-input"
+              type="text"
+              class="w-full bg-gray-800 border border-gray-700 text-sm rounded-lg p-2 focus:ring-teal-500 focus:border-teal-500"
+              placeholder="Enter team name"
+            />
+          </div>
+          <button
+            id="team-name-save-btn"
+            onclick="saveTeamName()"
+            class="btn-main px-4 py-2 rounded text-[11px] uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Save Name
+          </button>
+        </div>
       </div>
 
       <div id="teams-container" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
@@ -316,6 +334,8 @@
     // Current user (set via Google authentication email mapping)
     let currentUser = null;
     const numUsersInput = document.getElementById("num-users-input");
+    const teamNameInput = document.getElementById("team-name-input");
+    const teamNameSaveBtn = document.getElementById("team-name-save-btn");
     
     // Function to update number of users
     function updateNumUsers(newNum) {
@@ -544,6 +564,7 @@
       const players = data.players || [];
       const users = data.users || {};
       const draft = data.draft || { currentPick: 0, finished: false };
+      const getDisplayName = (id) => (users[id]?.teamName || id || "");
 
       // DRAFT STATUS & CURRENT DRAFTER
       let drafter = "";
@@ -577,7 +598,7 @@
           (isTakenByMe ? "border-teal-500/50" : "");
 
         const ownerLabel = isOwned
-          ? `<div class="text-[10px] text-teal-400 font-bold uppercase">${p.owner}</div>`
+          ? `<div class="text-[10px] text-teal-400 font-bold uppercase">${getDisplayName(p.owner)}</div>`
           : `<div class="text-[10px] text-gray-500 uppercase">Undrafted</div>`;
           
         const seedText = p.seed ? `<span class="text-[10px] text-gray-500 mr-2">[${p.seed}]</span>` : "";
@@ -912,7 +933,7 @@
                       </span>
                       ${isPlayer1Winner ? '<span class="text-teal-400 text-xs font-bold">✓ WINNER</span>' : '<span class="text-xs text-gray-500">Click to win</span>'}
                     </div>
-                    ${player1.owner ? `<div class="text-[10px] text-gray-400 mt-1">${player1.owner}</div>` : '<div class="text-[10px] text-gray-500 mt-1">Undrafted</div>'}
+                    ${player1.owner ? `<div class="text-[10px] text-gray-400 mt-1">${getDisplayName(player1.owner)}</div>` : '<div class="text-[10px] text-gray-500 mt-1">Undrafted</div>'}
                   </div>
                   <div class="text-center text-xs text-gray-500 font-bold">vs</div>
                   <div 
@@ -925,7 +946,7 @@
                       </span>
                       ${isPlayer2Winner ? '<span class="text-teal-400 text-xs font-bold">✓ WINNER</span>' : '<span class="text-xs text-gray-500">Click to win</span>'}
                     </div>
-                    ${player2.owner ? `<div class="text-[10px] text-gray-400 mt-1">${player2.owner}</div>` : '<div class="text-[10px] text-gray-500 mt-1">Undrafted</div>'}
+                    ${player2.owner ? `<div class="text-[10px] text-gray-400 mt-1">${getDisplayName(player2.owner)}</div>` : '<div class="text-[10px] text-gray-500 mt-1">Undrafted</div>'}
                   </div>
                 </div>
               `;
@@ -1215,6 +1236,20 @@
 
         teamsContainer.innerHTML = "";
 
+        // Update team name editor UI for the signed-in user
+        const editor = document.getElementById("team-name-editor");
+        if (editor && teamNameInput && teamNameSaveBtn) {
+          if (isAuthenticated() && currentUser) {
+            const currentTeamName = users[currentUser]?.teamName || currentUser;
+            teamNameInput.value = currentTeamName;
+            teamNameInput.disabled = false;
+            teamNameSaveBtn.disabled = false;
+            editor.classList.remove("hidden");
+          } else {
+            editor.classList.add("hidden");
+          }
+        }
+
         // Always compute team score as the sum of player points to avoid drift
         const computeTeamScore = (owner) => {
           return players
@@ -1233,6 +1268,7 @@
           const user = users[u] || { picks: [], score: 0 };
           const pickedPlayers = players.filter(p => p.owner === u).sort((a, b) => (b.points || 0) - (a.points || 0));
           const isViewing = currentUser === u;
+          const displayName = users[u]?.teamName || u;
           const activePlayers = pickedPlayers.filter(p => !p.eliminated);
 
           // Compute displayed score from player points (source of truth)
@@ -1249,7 +1285,7 @@
             <div class="flex justify-between items-start mb-4">
               <div>
                 <div class="text-lg font-bold ${isViewing ? 'text-teal-400' : 'text-white'}">
-                  ${idx === 0 ? '🥇 ' : idx === 1 ? '🥈 ' : idx === 2 ? '🥉 ' : ''}${u}
+                ${idx === 0 ? '🥇 ' : idx === 1 ? '🥈 ' : idx === 2 ? '🥉 ' : ''}${displayName}
                 </div>
               <div class="text-xs text-gray-400 mt-1 flex gap-2">
                  <span>${activePlayers.length} not eliminated</span>
@@ -1335,8 +1371,28 @@
     // Listen for auth state changes
     auth.onAuthStateChanged((user) => {
       updateAuthUI(user);
+      // Refresh teams so name editor & display update after auth change
+      refreshTeams();
     });
     
+    // Save team name for the current signed-in user
+    window.saveTeamName = function() {
+      if (!isAuthenticated() || !currentUser) {
+        alert("Please sign in to edit your team name.");
+        return;
+      }
+      if (!teamNameInput) return;
+      const newName = teamNameInput.value.trim() || currentUser;
+      db.ref(`/users/${currentUser}/teamName`).set(newName)
+        .then(() => {
+          refreshTeams();
+        })
+        .catch((error) => {
+          console.error("Failed to save team name:", error);
+          alert("Failed to save team name: " + error.message);
+        });
+    };
+
     // Login function for Firebase Authentication (using compat mode)
     window.loginAndSave = function() {
       auth.signInWithPopup(provider)
