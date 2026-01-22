@@ -1464,15 +1464,15 @@
                     // Trade mode checkbox for other teams
                     if (tradeMode && !isViewing && !isEliminated) {
                       const isSelected = selectedTheirPlayers.has(pl.id);
-                      // Use JSON.stringify to safely escape the team owner string
-                      const teamOwnerJson = JSON.stringify(u);
+                      // Escape single quotes in team owner name
+                      const teamOwnerEscaped = String(u).replace(/'/g, "\\'");
                       tradeCheckbox = `
                         <input 
                           type="checkbox" 
                           ${isSelected ? 'checked' : ''} 
                           data-team-owner="${u}"
                           data-player-id="${pl.id}"
-                          onchange="if(window.selectTheirPlayer) { window.selectTheirPlayer(${pl.id}, ${teamOwnerJson}); }"
+                          onchange="window.selectTheirPlayer && window.selectTheirPlayer(${pl.id}, '${teamOwnerEscaped}')"
                           onclick="event.stopPropagation()"
                           class="w-4 h-4 text-teal-600 bg-gray-700 border-gray-600 rounded focus:ring-teal-500 cursor-pointer"
                           style="min-width: 16px; min-height: 16px;"
@@ -1631,7 +1631,12 @@
     }
 
     function selectTheirPlayer(playerId, teamOwner) {
-      if (!tradeMode) return;
+      if (!tradeMode) {
+        console.log("Trade mode not active");
+        return;
+      }
+      
+      console.log("selectTheirPlayer called:", playerId, teamOwner, "Current selectedTargetTeam:", selectedTargetTeam);
       
       // If selecting from a different team, clear previous selection
       if (selectedTargetTeam && selectedTargetTeam !== teamOwner) {
@@ -1650,8 +1655,11 @@
           } else {
             selectedTheirPlayers.add(playerId);
           }
-          updateTradeSummary();
-          refreshTeams();
+          console.log("After switch - selectedTheirPlayers:", Array.from(selectedTheirPlayers));
+          setTimeout(() => {
+            updateTradeSummary();
+            refreshTeams();
+          }, 50);
         });
         return;
       }
@@ -1668,48 +1676,71 @@
         selectedTheirPlayers.add(playerId);
       }
       
+      console.log("After toggle - selectedTheirPlayers:", Array.from(selectedTheirPlayers), "size:", selectedTheirPlayers.size);
+      
+      // Update summary immediately, then refresh teams
       updateTradeSummary();
-      refreshTeams();
+      // Refresh teams after a short delay to allow summary to update first
+      setTimeout(() => {
+        refreshTeams();
+      }, 100);
     }
 
     function updateTradeSummary() {
-      const summaryEl = document.getElementById("trade-selection-summary");
-      if (!summaryEl) return;
+      console.log("updateTradeSummary called - selectedMyPlayers:", Array.from(selectedMyPlayers), "selectedTheirPlayers:", Array.from(selectedTheirPlayers));
       
-      const myPlayersEl = document.getElementById("my-trade-players");
-      const theirPlayersEl = document.getElementById("their-trade-players");
-      const confirmBtn = document.getElementById("confirm-trade-btn");
-      const targetSelect = document.getElementById("trade-target-team");
-      
-      if (!myPlayersEl || !theirPlayersEl || !confirmBtn || !targetSelect) return;
-      
-      if (selectedMyPlayers.size === 0 && selectedTheirPlayers.size === 0) {
-        summaryEl.classList.add("hidden");
-        return;
-      }
-      
-      summaryEl.classList.remove("hidden");
-      
-      // Get player names
-      db.ref("/").once("value", snap => {
-        const data = snap.val();
-        if (!data || !data.players) return;
+      // Use a small delay to ensure DOM is ready
+      setTimeout(() => {
+        const summaryEl = document.getElementById("trade-selection-summary");
+        if (!summaryEl) {
+          console.log("Summary element not found, retrying...");
+          setTimeout(updateTradeSummary, 100);
+          return;
+        }
         
-        const players = data.players;
-        const users = data.users || {};
-        const myPlayerNames = Array.from(selectedMyPlayers)
-          .map(id => {
-            const p = players.find(pl => pl.id === id);
-            return p ? p.name : `Player ${id}`;
-          });
-        const theirPlayerNames = Array.from(selectedTheirPlayers)
-          .map(id => {
-            const p = players.find(pl => pl.id === id);
-            return p ? p.name : `Player ${id}`;
-          });
+        const myPlayersEl = document.getElementById("my-trade-players");
+        const theirPlayersEl = document.getElementById("their-trade-players");
+        const confirmBtn = document.getElementById("confirm-trade-btn");
+        const targetSelect = document.getElementById("trade-target-team");
         
-        myPlayersEl.textContent = myPlayerNames.length > 0 ? myPlayerNames.join(", ") : "None";
-        theirPlayersEl.textContent = theirPlayerNames.length > 0 ? theirPlayerNames.join(", ") : "None";
+        if (!myPlayersEl || !theirPlayersEl || !confirmBtn || !targetSelect) {
+          console.log("Trade summary elements not found, retrying...");
+          setTimeout(updateTradeSummary, 100);
+          return;
+        }
+        
+        if (selectedMyPlayers.size === 0 && selectedTheirPlayers.size === 0) {
+          summaryEl.classList.add("hidden");
+          return;
+        }
+        
+        summaryEl.classList.remove("hidden");
+        
+        // Get player names
+        db.ref("/").once("value", snap => {
+          const data = snap.val();
+          if (!data || !data.players) {
+            console.log("No data or players found");
+            return;
+          }
+          
+          const players = data.players;
+          const users = data.users || {};
+          const myPlayerNames = Array.from(selectedMyPlayers)
+            .map(id => {
+              const p = players.find(pl => pl.id === id);
+              return p ? p.name : `Player ${id}`;
+            });
+          const theirPlayerNames = Array.from(selectedTheirPlayers)
+            .map(id => {
+              const p = players.find(pl => pl.id === id);
+              return p ? p.name : `Player ${id}`;
+            });
+          
+          console.log("Updating display - myPlayerNames:", myPlayerNames, "theirPlayerNames:", theirPlayerNames);
+          
+          myPlayersEl.textContent = myPlayerNames.length > 0 ? myPlayerNames.join(", ") : "None";
+          theirPlayersEl.textContent = theirPlayerNames.length > 0 ? theirPlayerNames.join(", ") : "None";
         
         // Populate target team dropdown
         targetSelect.innerHTML = '<option value="">Select team to trade with...</option>';
@@ -1742,6 +1773,7 @@
                           selectedTheirPlayers.size > 0 && 
                           selectedTargetTeam !== null;
         confirmBtn.disabled = !canConfirm;
+        });
       });
     }
 
