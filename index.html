@@ -1971,14 +1971,17 @@
             const otherUser = isIncoming ? trade.fromUser : trade.toUser;
             const otherUserName = users[otherUser]?.teamName || otherUser;
             
-            const myPlayers = isIncoming ? trade.theirPlayers : trade.myPlayers;
-            const theirPlayers = isIncoming ? trade.myPlayers : trade.theirPlayers;
+            // For display: what you receive and what you give
+            // For incoming: you receive trade.myPlayers (from sender), you give trade.theirPlayers (to sender)
+            // For outgoing: you give trade.myPlayers (to recipient), you receive trade.theirPlayers (from recipient)
+            const playersYouReceive = isIncoming ? trade.myPlayers : trade.theirPlayers;
+            const playersYouGive = isIncoming ? trade.theirPlayers : trade.myPlayers;
             
-            const myPlayerNames = myPlayers.map(id => {
+            const playersYouReceiveNames = playersYouReceive.map(id => {
               const p = players.find(pl => pl.id === id);
               return p ? p.name : `Player ${id}`;
             });
-            const theirPlayerNames = theirPlayers.map(id => {
+            const playersYouGiveNames = playersYouGive.map(id => {
               const p = players.find(pl => pl.id === id);
               return p ? p.name : `Player ${id}`;
             });
@@ -2017,7 +2020,7 @@
                 <div>
                   <div class="text-xs font-bold text-teal-400 mb-2">You Receive:</div>
                   <div class="space-y-1">
-                    ${myPlayerNames.length > 0 ? myPlayerNames.map(name => 
+                    ${playersYouReceiveNames.length > 0 ? playersYouReceiveNames.map(name => 
                       `<div class="text-sm p-2 bg-gray-800 rounded border border-gray-700">${name}</div>`
                     ).join('') : '<div class="text-sm text-gray-500">None</div>'}
                   </div>
@@ -2025,7 +2028,7 @@
                 <div>
                   <div class="text-xs font-bold text-teal-400 mb-2">You Give:</div>
                   <div class="space-y-1">
-                    ${theirPlayerNames.length > 0 ? theirPlayerNames.map(name => 
+                    ${playersYouGiveNames.length > 0 ? playersYouGiveNames.map(name => 
                       `<div class="text-sm p-2 bg-gray-800 rounded border border-gray-700">${name}</div>`
                     ).join('') : '<div class="text-sm text-gray-500">None</div>'}
                   </div>
