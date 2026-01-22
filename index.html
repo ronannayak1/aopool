@@ -1453,8 +1453,8 @@
                           type="checkbox" 
                           ${isSelected ? 'checked' : ''} 
                           data-player-id="${pl.id}"
-                          onchange="if(window.selectMyPlayer) window.selectMyPlayer(${pl.id})"
-                          onclick="event.stopPropagation(); if(window.selectMyPlayer) window.selectMyPlayer(${pl.id})"
+                          onchange="if(window.selectMyPlayer) { window.selectMyPlayer(${pl.id}); }"
+                          onclick="event.stopPropagation()"
                           class="w-4 h-4 text-teal-600 bg-gray-700 border-gray-600 rounded focus:ring-teal-500 cursor-pointer"
                           style="min-width: 16px; min-height: 16px;"
                         />
@@ -1472,8 +1472,8 @@
                           ${isSelected ? 'checked' : ''} 
                           data-team-owner="${u}"
                           data-player-id="${pl.id}"
-                          onchange="if(window.selectTheirPlayer) window.selectTheirPlayer(${pl.id}, ${teamOwnerJson})"
-                          onclick="event.stopPropagation(); if(window.selectTheirPlayer) window.selectTheirPlayer(${pl.id}, ${teamOwnerJson})"
+                          onchange="if(window.selectTheirPlayer) { window.selectTheirPlayer(${pl.id}, ${teamOwnerJson}); }"
+                          onclick="event.stopPropagation()"
                           class="w-4 h-4 text-teal-600 bg-gray-700 border-gray-600 rounded focus:ring-teal-500 cursor-pointer"
                           style="min-width: 16px; min-height: 16px;"
                         />
@@ -1615,8 +1615,6 @@
       selectedTheirPlayers.clear();
       selectedTargetTeam = null;
       
-      console.log("Trade mode toggled to:", tradeMode); // Debug
-      
       // Force refresh teams to show/hide checkboxes
       refreshTeams();
     }
@@ -1669,6 +1667,7 @@
       } else {
         selectedTheirPlayers.add(playerId);
       }
+      
       updateTradeSummary();
       refreshTeams();
     }
@@ -1820,38 +1819,40 @@
           const players = data.players;
           const users = data.users;
           
-          // Transfer my players to them
+          // Ensure users object has picks arrays
+          if (!users[trade.fromUser]) users[trade.fromUser] = { picks: [], score: 0 };
+          if (!users[trade.toUser]) users[trade.toUser] = { picks: [], score: 0 };
+          if (!users[trade.fromUser].picks) users[trade.fromUser].picks = [];
+          if (!users[trade.toUser].picks) users[trade.toUser].picks = [];
+          
+          // Transfer players from trade.fromUser to trade.toUser (myPlayers)
           trade.myPlayers.forEach(playerId => {
             const pIndex = players.findIndex(p => p.id === playerId);
-            if (pIndex !== -1 && players[pIndex].owner === trade.fromUser) {
-              players[pIndex].owner = trade.toUser;
-              // Update user picks
-              if (users[trade.fromUser].picks) {
+            if (pIndex !== -1) {
+              // Verify player belongs to fromUser before transferring
+              if (players[pIndex].owner === trade.fromUser) {
+                players[pIndex].owner = trade.toUser;
+                // Update user picks arrays
                 users[trade.fromUser].picks = users[trade.fromUser].picks.filter(id => id !== playerId);
-              }
-              if (!users[trade.toUser].picks) {
-                users[trade.toUser].picks = [];
-              }
-              if (!users[trade.toUser].picks.includes(playerId)) {
-                users[trade.toUser].picks.push(playerId);
+                if (!users[trade.toUser].picks.includes(playerId)) {
+                  users[trade.toUser].picks.push(playerId);
+                }
               }
             }
           });
           
-          // Transfer their players to me
+          // Transfer players from trade.toUser to trade.fromUser (theirPlayers)
           trade.theirPlayers.forEach(playerId => {
             const pIndex = players.findIndex(p => p.id === playerId);
-            if (pIndex !== -1 && players[pIndex].owner === trade.toUser) {
-              players[pIndex].owner = trade.fromUser;
-              // Update user picks
-              if (users[trade.toUser].picks) {
+            if (pIndex !== -1) {
+              // Verify player belongs to toUser before transferring
+              if (players[pIndex].owner === trade.toUser) {
+                players[pIndex].owner = trade.fromUser;
+                // Update user picks arrays
                 users[trade.toUser].picks = users[trade.toUser].picks.filter(id => id !== playerId);
-              }
-              if (!users[trade.fromUser].picks) {
-                users[trade.fromUser].picks = [];
-              }
-              if (!users[trade.fromUser].picks.includes(playerId)) {
-                users[trade.fromUser].picks.push(playerId);
+                if (!users[trade.fromUser].picks.includes(playerId)) {
+                  users[trade.fromUser].picks.push(playerId);
+                }
               }
             }
           });
@@ -1863,9 +1864,17 @@
           // Mark trade as accepted
           db.ref(`/trades/${tradeId}`).update({ status: 'accepted' })
             .then(() => {
+              alert("Trade accepted! Players have been transferred.");
               refreshTrades();
               refreshTeams();
+            })
+            .catch(error => {
+              console.error("Error updating trade status:", error);
+              alert("Trade was processed but there was an error updating the status.");
             });
+        }).catch(error => {
+          console.error("Error accepting trade:", error);
+          alert("Failed to accept trade: " + error.message);
         });
       });
     }
