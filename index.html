@@ -76,6 +76,9 @@
       <button onclick="showPage('teams')" id="nav-teams" class="nav-btn px-4 py-2 text-sm font-bold uppercase tracking-widest text-gray-400 hover:text-teal-400 rounded-t transition">
         Teams
       </button>
+      <button onclick="showPage('trades')" id="nav-trades" class="nav-btn px-4 py-2 text-sm font-bold uppercase tracking-widest text-gray-400 hover:text-teal-400 rounded-t transition">
+        Trades
+      </button>
     </div>
   </nav>
 
@@ -151,9 +154,63 @@
             Save Name
           </button>
         </div>
+        <div id="trade-mode-toggle" class="sleeper-card rounded-xl p-4 hidden">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-sm font-bold uppercase tracking-widest text-teal-400 mb-1">Trade Mode</h3>
+              <p class="text-[10px] text-gray-400">Select players from your team and another team to create a trade</p>
+            </div>
+            <button
+              onclick="toggleTradeMode()"
+              class="btn-main px-4 py-2 rounded text-[11px] uppercase tracking-widest"
+            >
+              Exit Trade Mode
+            </button>
+          </div>
+          <div id="trade-selection-summary" class="mt-4 p-3 bg-gray-800 rounded border border-gray-700 hidden">
+            <div class="text-xs text-gray-400 mb-2">Trade Summary:</div>
+            <div class="flex gap-4 text-sm">
+              <div>
+                <span class="text-teal-400 font-bold">You Give:</span>
+                <div id="my-trade-players" class="text-gray-300 mt-1"></div>
+              </div>
+              <div>
+                <span class="text-teal-400 font-bold">You Receive:</span>
+                <div id="their-trade-players" class="text-gray-300 mt-1"></div>
+              </div>
+            </div>
+            <div class="mt-3 flex gap-2">
+              <select id="trade-target-team" class="bg-gray-700 border border-gray-600 text-sm rounded-lg p-2 flex-1">
+                <option value="">Select team to trade with...</option>
+              </select>
+              <button
+                onclick="confirmTrade()"
+                id="confirm-trade-btn"
+                class="btn-main px-4 py-2 rounded text-[11px] uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled
+              >
+                Confirm Trade
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div id="teams-container" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+    </div>
+  </main>
+
+  <!-- TRADES PAGE -->
+  <main id="page-trades" class="page-content max-w-7xl mx-auto p-4 hidden">
+    <div class="space-y-6">
+      <div>
+        <h2 class="text-2xl font-bold mb-2">Trades</h2>
+        <div class="text-[10px] text-gray-400 leading-relaxed mb-4">
+          View and manage pending trades. Only the recipient can accept or deny trades.
+        </div>
+      </div>
+
+      <div id="trades-container" class="space-y-4"></div>
     </div>
   </main>
 
@@ -662,6 +719,9 @@
       if (activePage === 'bracket') {
         refreshBracket();
       }
+      if (activePage === 'trades') {
+        refreshTrades();
+      }
     });
 
     // ===== PAGE NAVIGATION =====
@@ -709,6 +769,10 @@
       // Refresh teams if showing teams page
       if (page === 'teams') {
         refreshTeams();
+      }
+      // Refresh trades if showing trades page
+      if (page === 'trades') {
+        refreshTrades();
       }
     }
 
@@ -1252,6 +1316,76 @@
           }
         }
 
+        // Show/hide trade mode toggle
+        const tradeToggle = document.getElementById("trade-mode-toggle");
+        if (tradeToggle && isAuthenticated() && currentUser) {
+          if (!tradeMode) {
+            // Show "Enter Trade Mode" button
+            tradeToggle.innerHTML = `
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="text-sm font-bold uppercase tracking-widest text-teal-400 mb-1">Trading</h3>
+                  <p class="text-[10px] text-gray-400">Select players from your team and another team to create a trade</p>
+                </div>
+                <button
+                  onclick="toggleTradeMode()"
+                  class="btn-main px-4 py-2 rounded text-[11px] uppercase tracking-widest"
+                >
+                  Enter Trade Mode
+                </button>
+              </div>
+            `;
+            tradeToggle.classList.remove("hidden");
+          } else {
+            // Show trade mode UI
+            tradeToggle.innerHTML = `
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="text-sm font-bold uppercase tracking-widest text-teal-400 mb-1">Trade Mode</h3>
+                  <p class="text-[10px] text-gray-400">Select players from your team and another team to create a trade</p>
+                </div>
+                <button
+                  onclick="toggleTradeMode()"
+                  class="btn-main px-4 py-2 rounded text-[11px] uppercase tracking-widest"
+                >
+                  Exit Trade Mode
+                </button>
+              </div>
+              <div id="trade-selection-summary" class="mt-4 p-3 bg-gray-800 rounded border border-gray-700 hidden">
+                <div class="text-xs text-gray-400 mb-2">Trade Summary:</div>
+                <div class="flex gap-4 text-sm">
+                  <div>
+                    <span class="text-teal-400 font-bold">You Give:</span>
+                    <div id="my-trade-players" class="text-gray-300 mt-1"></div>
+                  </div>
+                  <div>
+                    <span class="text-teal-400 font-bold">You Receive:</span>
+                    <div id="their-trade-players" class="text-gray-300 mt-1"></div>
+                  </div>
+                </div>
+                <div class="mt-3 flex gap-2">
+                  <select id="trade-target-team" class="bg-gray-700 border border-gray-600 text-sm rounded-lg p-2 flex-1">
+                    <option value="">Select team to trade with...</option>
+                  </select>
+                  <button
+                    onclick="confirmTrade()"
+                    id="confirm-trade-btn"
+                    class="btn-main px-4 py-2 rounded text-[11px] uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled
+                  >
+                    Confirm Trade
+                  </button>
+                </div>
+              </div>
+            `;
+            tradeToggle.classList.remove("hidden");
+            // Update summary after a brief delay to ensure DOM is ready
+            setTimeout(() => updateTradeSummary(), 100);
+          }
+        } else if (tradeToggle) {
+          tradeToggle.classList.add("hidden");
+        }
+
         // Always compute team score as the sum of player points to avoid drift
         const computeTeamScore = (owner) => {
           return players
@@ -1308,13 +1442,43 @@
                     const isEliminated = pl.eliminated || false;
                     const eliminatedClass = isEliminated ? 'opacity-40 line-through' : '';
                     const eliminatedBadge = isEliminated ? '<div class="text-[10px] text-red-400 font-bold">ELIMINATED</div>' : '';
+                    
+                    // Trade mode checkbox for my team
+                    let tradeCheckbox = '';
+                    if (tradeMode && isViewing && !isEliminated) {
+                      const isSelected = selectedMyPlayers.has(pl.id);
+                      tradeCheckbox = `
+                        <input 
+                          type="checkbox" 
+                          ${isSelected ? 'checked' : ''} 
+                          onchange="selectMyPlayer(${pl.id})"
+                          class="w-4 h-4 text-teal-600 bg-gray-700 border-gray-600 rounded focus:ring-teal-500"
+                        />
+                      `;
+                    }
+                    
+                    // Trade mode checkbox for other teams
+                    if (tradeMode && !isViewing && !isEliminated) {
+                      const isSelected = selectedTheirPlayers.has(pl.id);
+                      tradeCheckbox = `
+                        <input 
+                          type="checkbox" 
+                          ${isSelected ? 'checked' : ''} 
+                          onchange="selectTheirPlayer(${pl.id}, '${u}')"
+                          class="w-4 h-4 text-teal-600 bg-gray-700 border-gray-600 rounded focus:ring-teal-500"
+                        />
+                      `;
+                    }
 
                     return `
                       <div class="flex justify-between items-center p-2 bg-gray-900 rounded border ${isEliminated ? 'border-red-700' : 'border-gray-700'} ${eliminatedClass}">
-                        <div>
-                          <div class="text-sm font-bold">${seedText}${pl.name}</div>
-                          <div class="text-[10px] text-gray-400">Wins: ${pl.totalWins || 0}</div>
-                          ${eliminatedBadge}
+                        <div class="flex items-center gap-2 flex-1">
+                          ${tradeCheckbox}
+                          <div class="flex-1">
+                            <div class="text-sm font-bold">${seedText}${pl.name}</div>
+                            <div class="text-[10px] text-gray-400">Wins: ${pl.totalWins || 0}</div>
+                            ${eliminatedBadge}
+                          </div>
                         </div>
                         <div class="text-xs">${pointsText}</div>
                       </div>
@@ -1428,6 +1592,433 @@
     // Make functions available globally
     window.selectBracketWinner = selectBracketWinner;
     window.selectBracketWinnerDirect = selectBracketWinnerDirect;
+
+    // ===== TRADING FUNCTIONALITY =====
+    let tradeMode = false;
+    let selectedMyPlayers = new Set();
+    let selectedTheirPlayers = new Set();
+    let selectedTargetTeam = null;
+
+    function toggleTradeMode() {
+      tradeMode = !tradeMode;
+      selectedMyPlayers.clear();
+      selectedTheirPlayers.clear();
+      selectedTargetTeam = null;
+      
+      const toggleEl = document.getElementById("trade-mode-toggle");
+      const summaryEl = document.getElementById("trade-selection-summary");
+      
+      if (tradeMode) {
+        toggleEl.classList.remove("hidden");
+        summaryEl.classList.add("hidden");
+      } else {
+        toggleEl.classList.add("hidden");
+        summaryEl.classList.add("hidden");
+      }
+      
+      refreshTeams();
+    }
+
+    function selectMyPlayer(playerId) {
+      if (!tradeMode) return;
+      if (selectedMyPlayers.has(playerId)) {
+        selectedMyPlayers.delete(playerId);
+      } else {
+        selectedMyPlayers.add(playerId);
+      }
+      updateTradeSummary();
+      refreshTeams();
+    }
+
+    function selectTheirPlayer(playerId, teamOwner) {
+      if (!tradeMode) return;
+      
+      // If selecting from a different team, clear previous selection
+      if (selectedTargetTeam && selectedTargetTeam !== teamOwner) {
+        // Get team name for confirmation
+        db.ref("/").once("value", snap => {
+          const data = snap.val();
+          const users = data?.users || {};
+          const teamName = users[teamOwner]?.teamName || teamOwner;
+          if (!confirm("You have players selected from another team. Switch to " + teamName + "? This will clear your current selection.")) {
+            return;
+          }
+          selectedTheirPlayers.clear();
+          selectedTargetTeam = teamOwner;
+          if (selectedTheirPlayers.has(playerId)) {
+            selectedTheirPlayers.delete(playerId);
+          } else {
+            selectedTheirPlayers.add(playerId);
+          }
+          updateTradeSummary();
+          refreshTeams();
+        });
+        return;
+      }
+      
+      selectedTargetTeam = teamOwner;
+      
+      if (selectedTheirPlayers.has(playerId)) {
+        selectedTheirPlayers.delete(playerId);
+        // If no players selected from this team, clear target team
+        if (selectedTheirPlayers.size === 0) {
+          selectedTargetTeam = null;
+        }
+      } else {
+        selectedTheirPlayers.add(playerId);
+      }
+      updateTradeSummary();
+      refreshTeams();
+    }
+
+    function updateTradeSummary() {
+      const summaryEl = document.getElementById("trade-selection-summary");
+      if (!summaryEl) return;
+      
+      const myPlayersEl = document.getElementById("my-trade-players");
+      const theirPlayersEl = document.getElementById("their-trade-players");
+      const confirmBtn = document.getElementById("confirm-trade-btn");
+      const targetSelect = document.getElementById("trade-target-team");
+      
+      if (!myPlayersEl || !theirPlayersEl || !confirmBtn || !targetSelect) return;
+      
+      if (selectedMyPlayers.size === 0 && selectedTheirPlayers.size === 0) {
+        summaryEl.classList.add("hidden");
+        return;
+      }
+      
+      summaryEl.classList.remove("hidden");
+      
+      // Get player names
+      db.ref("/").once("value", snap => {
+        const data = snap.val();
+        if (!data || !data.players) return;
+        
+        const players = data.players;
+        const users = data.users || {};
+        const myPlayerNames = Array.from(selectedMyPlayers)
+          .map(id => {
+            const p = players.find(pl => pl.id === id);
+            return p ? p.name : `Player ${id}`;
+          });
+        const theirPlayerNames = Array.from(selectedTheirPlayers)
+          .map(id => {
+            const p = players.find(pl => pl.id === id);
+            return p ? p.name : `Player ${id}`;
+          });
+        
+        myPlayersEl.textContent = myPlayerNames.length > 0 ? myPlayerNames.join(", ") : "None";
+        theirPlayersEl.textContent = theirPlayerNames.length > 0 ? theirPlayerNames.join(", ") : "None";
+        
+        // Populate target team dropdown
+        targetSelect.innerHTML = '<option value="">Select team to trade with...</option>';
+        USERS.forEach(user => {
+          if (user !== currentUser) {
+            const opt = document.createElement("option");
+            opt.value = user;
+            opt.textContent = users[user]?.teamName || user;
+            if (selectedTargetTeam === user) {
+              opt.selected = true;
+            }
+            targetSelect.appendChild(opt);
+          }
+        });
+        
+        // Handle target team selection change
+        targetSelect.onchange = function() {
+          const newTarget = this.value || null;
+          // If switching teams, clear their player selection
+          if (newTarget !== selectedTargetTeam) {
+            selectedTheirPlayers.clear();
+          }
+          selectedTargetTeam = newTarget;
+          updateTradeSummary();
+          refreshTeams();
+        };
+        
+        // Enable confirm button only if both sides have players and target is selected
+        const canConfirm = selectedMyPlayers.size > 0 && 
+                          selectedTheirPlayers.size > 0 && 
+                          selectedTargetTeam !== null;
+        confirmBtn.disabled = !canConfirm;
+      });
+    }
+
+    function confirmTrade() {
+      if (!tradeMode || !currentUser) return;
+      if (selectedMyPlayers.size === 0 || selectedTheirPlayers.size === 0 || !selectedTargetTeam) {
+        alert("Please select players from both teams and select a target team.");
+        return;
+      }
+      
+      // Verify all selected players from other team actually belong to selectedTargetTeam
+      db.ref("/").once("value", snap => {
+        const data = snap.val();
+        if (!data || !data.players) return;
+        
+        const players = data.players;
+        const users = data.users || {};
+        const invalidPlayers = Array.from(selectedTheirPlayers).filter(playerId => {
+          const player = players.find(p => p.id === playerId);
+          return !player || player.owner !== selectedTargetTeam;
+        });
+        
+        if (invalidPlayers.length > 0) {
+          alert("Some selected players don't belong to the target team. Please refresh and try again.");
+          return;
+        }
+        
+        const targetTeamName = users[selectedTargetTeam]?.teamName || selectedTargetTeam;
+        if (!confirm(`Confirm trade: You give ${selectedMyPlayers.size} player(s) to ${targetTeamName} in exchange for ${selectedTheirPlayers.size} player(s)?`)) {
+          return;
+        }
+        
+        // Create trade object
+        const trade = {
+          fromUser: currentUser,
+          toUser: selectedTargetTeam,
+          myPlayers: Array.from(selectedMyPlayers),
+          theirPlayers: Array.from(selectedTheirPlayers),
+          status: 'pending',
+          timestamp: Date.now()
+        };
+        
+        // Save to Firebase
+        db.ref("/trades").push(trade)
+          .then(() => {
+            alert("Trade proposal sent!");
+            // Reset trade mode
+            toggleTradeMode();
+            // Switch to trades page
+            showPage('trades');
+          })
+          .catch(error => {
+            console.error("Error creating trade:", error);
+            alert("Failed to create trade: " + error.message);
+          });
+      });
+    }
+
+    function acceptTrade(tradeId) {
+      db.ref(`/trades/${tradeId}`).once("value", snap => {
+        const trade = snap.val();
+        if (!trade || trade.status !== 'pending' || trade.toUser !== currentUser) {
+          alert("You can only accept trades sent to you.");
+          return;
+        }
+        
+        if (!confirm("Accept this trade? This will transfer players between teams.")) {
+          return;
+        }
+        
+        // Update player ownerships
+        db.ref("/").transaction(data => {
+          if (!data || !data.players || !data.users) return data;
+          
+          const players = data.players;
+          const users = data.users;
+          
+          // Transfer my players to them
+          trade.myPlayers.forEach(playerId => {
+            const pIndex = players.findIndex(p => p.id === playerId);
+            if (pIndex !== -1 && players[pIndex].owner === trade.fromUser) {
+              players[pIndex].owner = trade.toUser;
+              // Update user picks
+              if (users[trade.fromUser].picks) {
+                users[trade.fromUser].picks = users[trade.fromUser].picks.filter(id => id !== playerId);
+              }
+              if (!users[trade.toUser].picks) {
+                users[trade.toUser].picks = [];
+              }
+              if (!users[trade.toUser].picks.includes(playerId)) {
+                users[trade.toUser].picks.push(playerId);
+              }
+            }
+          });
+          
+          // Transfer their players to me
+          trade.theirPlayers.forEach(playerId => {
+            const pIndex = players.findIndex(p => p.id === playerId);
+            if (pIndex !== -1 && players[pIndex].owner === trade.toUser) {
+              players[pIndex].owner = trade.fromUser;
+              // Update user picks
+              if (users[trade.toUser].picks) {
+                users[trade.toUser].picks = users[trade.toUser].picks.filter(id => id !== playerId);
+              }
+              if (!users[trade.fromUser].picks) {
+                users[trade.fromUser].picks = [];
+              }
+              if (!users[trade.fromUser].picks.includes(playerId)) {
+                users[trade.fromUser].picks.push(playerId);
+              }
+            }
+          });
+          
+          data.players = players;
+          data.users = users;
+          return data;
+        }).then(() => {
+          // Mark trade as accepted
+          db.ref(`/trades/${tradeId}`).update({ status: 'accepted' })
+            .then(() => {
+              refreshTrades();
+              refreshTeams();
+            });
+        });
+      });
+    }
+
+    function denyTrade(tradeId) {
+      db.ref(`/trades/${tradeId}`).once("value", snap => {
+        const trade = snap.val();
+        if (!trade || trade.status !== 'pending' || trade.toUser !== currentUser) {
+          alert("You can only deny trades sent to you.");
+          return;
+        }
+        
+        if (!confirm("Deny this trade?")) {
+          return;
+        }
+        
+        db.ref(`/trades/${tradeId}`).update({ status: 'denied' })
+          .then(() => {
+            refreshTrades();
+          });
+      });
+    }
+
+    function refreshTrades() {
+      const tradesContainer = document.getElementById("trades-container");
+      if (!tradesContainer) return;
+      
+      db.ref("/").once("value", mainSnap => {
+        const mainData = mainSnap.val();
+        if (!mainData) {
+          tradesContainer.innerHTML = "<div class='text-gray-400'>No data available.</div>";
+          return;
+        }
+        
+        const players = mainData.players || [];
+        const users = mainData.users || {};
+        
+        db.ref("/trades").once("value", tradesSnap => {
+          const trades = tradesSnap.val() || {};
+          const tradeEntries = Object.entries(trades);
+          
+          if (tradeEntries.length === 0) {
+            tradesContainer.innerHTML = "<div class='text-gray-400 text-center py-8'>No trades yet. Go to Teams page to create a trade.</div>";
+            return;
+          }
+          
+          // Filter trades relevant to current user
+          const relevantTrades = tradeEntries.filter(([id, trade]) => 
+            trade.fromUser === currentUser || trade.toUser === currentUser
+          );
+          
+          if (relevantTrades.length === 0) {
+            tradesContainer.innerHTML = "<div class='text-gray-400 text-center py-8'>No trades involving your team.</div>";
+            return;
+          }
+          
+          tradesContainer.innerHTML = "";
+          
+          relevantTrades.forEach(([tradeId, trade]) => {
+            const isIncoming = trade.toUser === currentUser;
+            const isPending = trade.status === 'pending';
+            const otherUser = isIncoming ? trade.fromUser : trade.toUser;
+            const otherUserName = users[otherUser]?.teamName || otherUser;
+            
+            const myPlayers = isIncoming ? trade.theirPlayers : trade.myPlayers;
+            const theirPlayers = isIncoming ? trade.myPlayers : trade.theirPlayers;
+            
+            const myPlayerNames = myPlayers.map(id => {
+              const p = players.find(pl => pl.id === id);
+              return p ? p.name : `Player ${id}`;
+            });
+            const theirPlayerNames = theirPlayers.map(id => {
+              const p = players.find(pl => pl.id === id);
+              return p ? p.name : `Player ${id}`;
+            });
+            
+            const statusColor = trade.status === 'accepted' ? 'text-green-400' : 
+                               trade.status === 'denied' ? 'text-red-400' : 'text-yellow-400';
+            const statusText = trade.status === 'accepted' ? 'ACCEPTED' : 
+                              trade.status === 'denied' ? 'DENIED' : 'PENDING';
+            
+            const tradeDiv = document.createElement("div");
+            tradeDiv.className = `sleeper-card rounded-xl p-4 border ${
+              isPending && isIncoming ? 'border-yellow-500' : 
+              trade.status === 'accepted' ? 'border-green-500' : 
+              trade.status === 'denied' ? 'border-red-500' : 
+              'border-gray-700'
+            }`;
+            
+            tradeDiv.innerHTML = `
+              <div class="flex justify-between items-start mb-4">
+                <div>
+                  <div class="text-lg font-bold ${isIncoming ? 'text-yellow-400' : 'text-teal-400'}">
+                    ${isIncoming ? 'Incoming' : 'Outgoing'} Trade
+                  </div>
+                  <div class="text-xs text-gray-400 mt-1">
+                    ${isIncoming ? 'From' : 'To'}: ${otherUserName}
+                  </div>
+                </div>
+                <div class="text-right">
+                  <div class="text-sm font-bold ${statusColor}">${statusText}</div>
+                  <div class="text-[10px] text-gray-500 mt-1">
+                    ${new Date(trade.timestamp).toLocaleString()}
+                  </div>
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <div class="text-xs font-bold text-teal-400 mb-2">You Receive:</div>
+                  <div class="space-y-1">
+                    ${myPlayerNames.length > 0 ? myPlayerNames.map(name => 
+                      `<div class="text-sm p-2 bg-gray-800 rounded border border-gray-700">${name}</div>`
+                    ).join('') : '<div class="text-sm text-gray-500">None</div>'}
+                  </div>
+                </div>
+                <div>
+                  <div class="text-xs font-bold text-teal-400 mb-2">You Give:</div>
+                  <div class="space-y-1">
+                    ${theirPlayerNames.length > 0 ? theirPlayerNames.map(name => 
+                      `<div class="text-sm p-2 bg-gray-800 rounded border border-gray-700">${name}</div>`
+                    ).join('') : '<div class="text-sm text-gray-500">None</div>'}
+                  </div>
+                </div>
+              </div>
+              ${isPending && isIncoming ? `
+                <div class="flex gap-2">
+                  <button
+                    onclick="acceptTrade('${tradeId}')"
+                    class="btn-main px-4 py-2 rounded text-[11px] uppercase tracking-widest flex-1"
+                  >
+                    Accept
+                  </button>
+                  <button
+                    onclick="denyTrade('${tradeId}')"
+                    class="px-4 py-2 rounded text-[11px] uppercase tracking-widest bg-red-600 hover:bg-red-700 text-white flex-1"
+                  >
+                    Deny
+                  </button>
+                </div>
+              ` : ''}
+            `;
+            
+            tradesContainer.appendChild(tradeDiv);
+          });
+        });
+      });
+    }
+
+    // Make trade functions globally available
+    window.toggleTradeMode = toggleTradeMode;
+    window.selectMyPlayer = selectMyPlayer;
+    window.selectTheirPlayer = selectTheirPlayer;
+    window.confirmTrade = confirmTrade;
+    window.acceptTrade = acceptTrade;
+    window.denyTrade = denyTrade;
 
     // ===== TEAMS PAGE LOGIC =====
     const teamsContainer = document.getElementById("teams-container");
